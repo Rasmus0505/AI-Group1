@@ -1,3 +1,5 @@
+import { eventManager, generateProgressOutput } from './eventSystem.js';
+
 export const initialState = {
     companyName: "Nexus Corp",
     turn: 1,
@@ -7,6 +9,8 @@ export const initialState = {
         reputation: 50,
         innovation: 10
     },
+    activeEvents: [], // 当前活跃事件
+    systemPrompts: [], // 待注入的系统提示
     players: [
         {
             id: "player_human",
@@ -81,6 +85,45 @@ export const initialState = {
     ]
 };
 
+/**
+ * 更新事件进度并生成输出
+ * @param {Object} state - 当前游戏状态
+ * @returns {Object} 包含事件相关的状态更新
+ */
+export function updateGameEvents(state) {
+    // 更新所有事件进度
+    const updateResult = eventManager.updateEvents();
+
+    // 生成进度显示文本
+    const progressOutput = generateProgressOutput(updateResult);
+
+    // 获取待注入的系统提示
+    const systemPrompts = eventManager.getSystemPrompts();
+
+    // 清空系统提示（防止重复）
+    eventManager.clearSystemPrompts();
+
+    // 更新状态中的事件和提示信息
+    const newState = {
+        ...state,
+        activeEvents: eventManager.getActiveEvents().map(e => ({
+            id: e.id,
+            description: e.description,
+            currentRound: e.currentRound,
+            totalRounds: e.totalRounds,
+            progress: e.getProgress()
+        })),
+        systemPrompts: systemPrompts
+    };
+
+    return {
+        state: newState,
+        progressOutput,
+        systemPrompts,
+        updateResult
+    };
+}
+
 export function processDecision(state, decision) {
     const newAttributes = { ...state.attributes };
     let resultText = "";
@@ -104,7 +147,7 @@ export function processDecision(state, decision) {
     newAttributes.morale = Math.min(100, Math.max(0, newAttributes.morale));
     newAttributes.reputation = Math.min(100, Math.max(0, newAttributes.reputation));
 
-    return {
+    const baseState = {
         ...state,
         turn: state.turn + 1,
         attributes: newAttributes,
@@ -114,4 +157,17 @@ export function processDecision(state, decision) {
             { id: Date.now() + 1, type: 'system', text: decision.resultNarrative || "由于你的决策，局势发生了变化。" }
         ]
     };
+
+    // 更新事件进度并获取事件相关输出
+    const eventUpdate = updateGameEvents(baseState);
+
+    // 如果有事件进度更新，添加到历史记录中
+    if (eventUpdate.progressOutput) {
+        eventUpdate.state.history = [
+            ...eventUpdate.state.history,
+            { id: Date.now() + 2, type: 'system', text: eventUpdate.progressOutput }
+        ];
+    }
+
+    return eventUpdate.state;
 }

@@ -35,15 +35,21 @@ export async function initGame(settings = "") {
 
 /**
  * Send player action to backend
- * action: { label: string, customText?: string, effects?: object }
+ * @param {Object} action - 玩家行动对象，包含 label, customText, effects 等
+ * @param {Array<string>} systemPrompts - 需要注入到 AI Context 中的系统提示（来自事件系统）
  * returns { state: GameState, options: GameOption[] }
  */
-export async function sendAction(action) {
+export async function sendAction(action, systemPrompts = []) {
     try {
+        const payload = {
+            action,
+            systemPrompts: systemPrompts.length > 0 ? systemPrompts : undefined
+        };
+
         const response = await fetch(`${API_BASE}/api/action`, {
             method: "POST",
             headers: getHeaders(),
-            body: JSON.stringify(action)
+            body: JSON.stringify(payload)
         });
         if (!response.ok) throw new Error("Failed to send action");
         return await response.json();
@@ -52,3 +58,4 @@ export async function sendAction(action) {
         throw error;
     }
 }
+
