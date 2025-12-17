@@ -7,6 +7,26 @@ export const initialState = {
         reputation: 50,
         innovation: 10
     },
+    players: [
+        {
+            id: "player_human",
+            name: "CEO (你)",
+            type: "human",
+            position: "ceo"
+        },
+        {
+            id: "player_ai_tech",
+            name: "CTO (AI)",
+            type: "ai",
+            position: "cto"
+        },
+        {
+            id: "player_ai_market",
+            name: "CMO (AI)",
+            type: "ai",
+            position: "cmo"
+        }
+    ],
     history: [
         {
             id: 0,

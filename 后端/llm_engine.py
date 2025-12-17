@@ -35,8 +35,8 @@ class LLMEngine:
     def _get_client(api_key: str):
         if not api_key:
             raise ValueError("API Key is missing")
-        # Use the user-provided API Base URL
-        return OpenAI(api_key=api_key, base_url="https://ylbuapi.com/v1")
+        # Use DeepSeek API URL
+        return OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
 
     @staticmethod
     def _get_hexagram():
@@ -79,15 +79,22 @@ class LLMEngine:
         return cls._call_llm(prompt, api_key)
 
     @classmethod
-    def process_turn(cls, current_state: dict, player_action_text: str, api_key: str):
+    def process_turn(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
         full_history = current_state.get('history', [])
         # Last 30 entries for context
         recent_history_entries = full_history[-30:] 
-        history_text = "\n".join([f"[{h['type'].upper()}] {h['text']}" for h in recent_history_entries])
+        history_text = "\n".join([f"[{h['type'].upper()}] {h.get('playerPosition', 'CEO')}: {h['text']}" for h in recent_history_entries])
         
         attributes = current_state.get('attributes', {})
         formulas = current_state.get('formulas', "Standard Logic")
         hexagram = cls._get_hexagram()
+        
+        # 玩家角色信息
+        player_role = "CEO"
+        if player_position == "cto":
+            player_role = "CTO"
+        elif player_position == "cmo":
+            player_role = "CMO"
         
         prompt = f"""
 {GAME_MANUAL}
@@ -103,7 +110,7 @@ class LLMEngine:
 {history_text}
 
 【玩家指令】
-"{player_action_text}"
+{player_role}: "{player_action_text}"
 
 【思维链要求 (Step-by-Step Logic)】
 在生成 JSON 之前，你必须先在内心（或 system_note 字段）进行严密逻辑推演：
@@ -129,14 +136,62 @@ class LLMEngine:
             response_data["system_note"] = response_data["logic_chain"]
             
         return response_data
+    
+    @classmethod
+    def generate_ai_decision(cls, current_state: dict, player_position: str, api_key: str):
+        """
+        为AI玩家生成决策
+        :param current_state: 当前游戏状态
+        :param player_position: AI玩家位置 (cto, cmo)
+        :param api_key: API密钥
+        :return: AI决策文本
+        """
+        full_history = current_state.get('history', [])
+        recent_history_entries = full_history[-30:] 
+        history_text = "\n".join([f"[{h['type'].upper()}] {h.get('playerPosition', 'CEO')}: {h['text']}" for h in recent_history_entries])
+        
+        attributes = current_state.get('attributes', {})
+        formulas = current_state.get('formulas', "Standard Logic")
+        hexagram = cls._get_hexagram()
+        
+        # AI角色信息
+        ai_role = "CTO"
+        ai_focus = "技术研发和创新方向"
+        if player_position == "cmo":
+            ai_role = "CMO"
+            ai_focus = "市场营销和品牌管理方向"
+        
+        prompt = f"""
+{GAME_MANUAL}
+
+【当前状态】
+- Turn: {current_state.get('turn', 1)}
+- Attributes: {attributes}
+- Formulas: {formulas}
+- I Ching: {hexagram}
+
+【完整历史记录】
+{history_text}
+
+【AI角色指令】
+你是公司的{ai_role}，负责{ai_focus}。
+请根据当前公司状态和历史决策，生成一个符合你角色定位的决策建议。
+决策必须是具体的行动（如"增加研发投入"、"开展市场推广活动"等），而不是效果或计划。
+
+【返回要求】
+直接返回决策文本，不要包含任何额外信息或格式。
+"""
+        
+        response = cls._call_llm(prompt, api_key)
+        return response.get("narrative", "").strip()
 
     @classmethod
     def _call_llm(cls, prompt, api_key):
         try:
             client = cls._get_client(api_key)
-            print(f"DEBUG: Calling LLM at {client.base_url} with model gpt-4o-mini...")
+            print(f"DEBUG: Calling LLM at {client.base_url} with model deepseek-chat...")
             response = client.chat.completions.create(
-                model="gpt-4o-mini", # Using a standard model name, Deepseek API will map it or use its own
+                model="deepseek-chat", # Using DeepSeek's chat model
                 messages=[
                     {"role": "system", "content": "You are a Game Master Engine. Output STRICT JSON only. No markdown formatting like ```json."},
                     {"role": "user", "content": prompt}
