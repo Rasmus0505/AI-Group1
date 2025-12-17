@@ -34,8 +34,8 @@ except Exception as e:
     print(f"   ❌ Baidu unreachable: {e}")
 
 # 3. Check Target again with Session
-print("\n3. Testing ylbuapi.com with Session & custom negotiation...")
-TARGET = "https://ylbuapi.com/v1/models"
+print("\n3. Testing DeepSeek API with Session & custom negotiation...")
+TARGET = "https://api.deepseek.com/v1/models"
 try:
     s = requests.Session()
     # Sometimes mounting an adapter helps control the pool
@@ -53,6 +53,6 @@ except Exception as e:
 print("\nSuggestions:")
 print("1. If you have a VPN/Proxy software (Clash, V2Ray, etc), ensure it's in 'Global' or 'Rule' mode properly.")
 print("2. Try temporarily turning OFF your VPN to see if the error changes.")
-print("3. Try changing the API Base URL to 'http://ylbuapi.com/v1' (remove 's') just to see if port 80 is open.")
+print("3. Try changing the API Base URL to 'http://api.deepseek.com/v1' (remove 's') just to see if port 80 is open.")
 
 input("\nPress Enter to exit...")

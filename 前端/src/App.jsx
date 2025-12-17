@@ -19,6 +19,26 @@ const defaultState = {
     reputation: 50,
     innovation: 10
   },
+  players: [
+    {
+      id: "player_human",
+      name: "CEO (你)",
+      type: "human",
+      position: "ceo"
+    },
+    {
+      id: "player_ai_tech",
+      name: "CTO (AI)",
+      type: "ai",
+      position: "cto"
+    },
+    {
+      id: "player_ai_market",
+      name: "CMO (AI)",
+      type: "ai",
+      position: "cmo"
+    }
+  ],
   history: [
     { id: -1, type: 'system', text: "正在初始化..." }
   ]
@@ -518,7 +538,7 @@ function App() {
     init();
   }, [view, gameMode, initSettings]);
 
-  const handleExecute = async (selectedOptionIds, customText) => {
+  const handleExecute = async (selectedOptionIds, customText, playerId = 'player_human', playerPosition = 'ceo') => {
     // 处理多选选项和自定义输入
     if (gameMode === 'official') {
       try {
@@ -529,22 +549,20 @@ function App() {
         const action = {
           label: selectedOptions.length > 0 ? selectedOptions.map(opt => opt.label).join(', ') : "Custom Directive",
           customText: customText.trim() || null,
-          selectedOptions: selectedOptions.map(opt => opt.id),
-          effects: selectedOptions.reduce((acc, opt) => {
-            // 合并所有选中选项的效果
-            if (opt.effects) {
-              Object.keys(opt.effects).forEach(key => {
-                acc[key] = (acc[key] || 0) + opt.effects[key];
-              });
-            }
-            return acc;
-          }, {}),
-          resultNarrative: selectedOptions.length > 0 ? selectedOptions.map(opt => opt.resultNarrative).join(' ') : null
+          gameId: "default_room",
+          playerId: playerId,
+          playerPosition: playerPosition
         };
         
         const data = await sendAction(action);
         setGameState(data.state);
         setCurrentOptions(data.options);
+        
+        // 如果是人类玩家（CEO）的决策，自动触发AI玩家的决策流程
+        if (playerPosition === 'ceo') {
+          console.log('触发AI玩家决策流程...');
+          // AI决策将由后端自动处理
+        }
       } catch (err) {
         console.error("API Error:", err);
       }
@@ -568,7 +586,9 @@ function App() {
           label: "Custom Directive",
           customText: customText,
           effects: analysis.effects,
-          resultNarrative: analysis.resultNarrative
+          resultNarrative: analysis.resultNarrative,
+          playerId: playerId,
+          playerPosition: playerPosition
         };
         nextState = processDecision(nextState, customDecision);
       }
@@ -653,7 +673,7 @@ function App() {
         </button>
       </header>
 
-      <Dashboard attributes={gameState.attributes} />
+      <Dashboard attributes={gameState.attributes} players={gameState.players} />
       <Terminal history={gameState.history} />
       <InputArea
         options={currentOptions}

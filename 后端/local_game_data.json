@@ -33,6 +33,670 @@
       "current_options": [],
       "passive_rules": {},
       "formulas": ""
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765973867,
+          "type": "system",
+          "text": "Error: Connection error."
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765973883,
+          "type": "system",
+          "text": "Error: Connection error."
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765974010,
+          "type": "system",
+          "text": "Error: Connection error."
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 2,
+      "company_name": "Nexus Corp",
+      "turn": 2,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765974010,
+          "type": "system",
+          "text": "Error: Connection error."
+        },
+        {
+          "id": 1765974148,
+          "type": "player",
+          "playerId": "player_human",
+          "playerPosition": "ceo",
+          "text": "决策: ??????"
+        },
+        {
+          "id": 1765974149,
+          "type": "system",
+          "text": "Error: Connection error."
+        },
+        {
+          "id": 1765974156,
+          "type": "player",
+          "playerId": "player_ai_tech",
+          "playerPosition": "cto",
+          "text": "CTO决策: Error: Connection error."
+        },
+        {
+          "id": 1765974157,
+          "type": "system",
+          "text": "Error: Connection error."
+        },
+        {
+          "id": 1765974167,
+          "type": "player",
+          "playerId": "player_ai_market",
+          "playerPosition": "cmo",
+          "text": "CMO决策: Error: Connection error."
+        },
+        {
+          "id": 1765974168,
+          "type": "system",
+          "text": "Error: Connection error."
+        }
+      ],
+      "current_options": [],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765974631,
+          "type": "system",
+          "text": "Error: Connection error."
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765974876,
+          "type": "system",
+          "text": "Error: Error code: 400 - {'error': {'message': 'Model Not Exist', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765974907,
+          "type": "system",
+          "text": "Error: Error code: 400 - {'error': {'message': 'Model Not Exist', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_request_error'}}"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "增加研发投入",
+          "desc": "投入更多资源到研发部门，提升创新能力",
+          "predicted_effect": "创新 +10, 现金 -200"
+        },
+        {
+          "id": "2",
+          "label": "开展市场推广",
+          "desc": "增加市场营销预算，提升品牌知名度",
+          "predicted_effect": "声誉 +10, 现金 -150"
+        },
+        {
+          "id": "3",
+          "label": "优化内部流程",
+          "desc": "改善公司内部管理流程，提高效率",
+          "predicted_effect": "士气 +5, 现金 -100"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 100,
+        "expense_base": 50
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base Cost) + Innovation * 5 (Licensing) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 2 (Fatigue) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 800,
+        "morale": 40,
+        "reputation": 30,
+        "innovation": 15
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765975053,
+          "type": "system",
+          "text": "在2045年的新深圳，你继承了父亲留下的小型科技公司'门扉科技'。公司专注于开发'认知接口'技术，一种能将人类思维与数字世界直接连接的前沿科技。然而，你接手时公司正处于危机边缘：现金仅够维持半年，核心团队士气低落，行业巨头'天穹集团'正虎视眈眈试图收购，而政府监管机构'数字伦理委员会'对你的技术持怀疑态度。更复杂的是，一个名为'开源心智'的黑客组织声称你的技术侵犯了'思维自由'，正在暗中破坏你的研发。父亲留下的笔记中有一句话：'凡墙皆是门，关键在于找到转动的铰链。'现在，你必须在这多方博弈的漩涡中做出第一个关键决策：是接受天穹集团的注资换取喘息之机，但可能失去控制权；还是抵押个人资产孤注一掷，赌上一切自主开发；或是寻求与'开源心智'进行危险对话，尝试化敌为友。公司的命运，从这一刻开始将因你的选择而走向完全不同的因果链条。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "接受天穹集团注资",
+          "desc": "接受行业巨头300万现金注资，换取20%股权和董事会席位。",
+          "predicted_effect": "Cash +250, Morale -10 (团队感到被收购), Reputation +5 (获得背书), Innovation -3 (可能失去研发自主)"
+        },
+        {
+          "id": "2",
+          "label": "抵押资产自主开发",
+          "desc": "抵押个人房产获得150万贷款，保持100%控制权但风险极高。",
+          "predicted_effect": "Cash +100, Morale +15 (团队看到决心), Reputation -5 (被视为冒险), Innovation +5 (完全自主)"
+        },
+        {
+          "id": "3",
+          "label": "接触开源心智组织",
+          "desc": "秘密联系黑客组织，尝试达成技术共享协议以化解敌意。",
+          "predicted_effect": "Cash -20 (谈判成本), Morale +5 (潜在盟友), Reputation -10 (政府可能不满), Innovation +8 (获得开源代码)"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 0,
+        "expense_base": 50,
+        "passive_income": "Innovation * 8 + Reputation * 3",
+        "passive_cost": "50 + Morale/25"
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Value) + Reputation * 3 (Client_Attraction) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Industry_Pressure) + Cash/100 (Financial_Security) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Competition_Erosion) + Innovation/5 (Tech_Leadership) + Action_Effect_Reputation",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Knowledge_Decay) + Morale/20 (Team_Creativity) + Action_Effect_Innovation"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 2,
+      "company_name": "Nexus Corp",
+      "turn": 2,
+      "attributes": {
+        "cash": 1416,
+        "morale": 45,
+        "reputation": 26,
+        "innovation": 12
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765975053,
+          "type": "system",
+          "text": "在2045年的新深圳，你继承了父亲留下的小型科技公司'门扉科技'。公司专注于开发'认知接口'技术，一种能将人类思维与数字世界直接连接的前沿科技。然而，你接手时公司正处于危机边缘：现金仅够维持半年，核心团队士气低落，行业巨头'天穹集团'正虎视眈眈试图收购，而政府监管机构'数字伦理委员会'对你的技术持怀疑态度。更复杂的是，一个名为'开源心智'的黑客组织声称你的技术侵犯了'思维自由'，正在暗中破坏你的研发。父亲留下的笔记中有一句话：'凡墙皆是门，关键在于找到转动的铰链。'现在，你必须在这多方博弈的漩涡中做出第一个关键决策：是接受天穹集团的注资换取喘息之机，但可能失去控制权；还是抵押个人资产孤注一掷，赌上一切自主开发；或是寻求与'开源心智'进行危险对话，尝试化敌为友。公司的命运，从这一刻开始将因你的选择而走向完全不同的因果链条。"
+        },
+        {
+          "id": 1765975098,
+          "type": "player",
+          "playerId": "player_human",
+          "playerPosition": "ceo",
+          "text": "决策: 接受天穹集团注资"
+        },
+        {
+          "id": 1765975099,
+          "type": "system",
+          "text": "你签署了协议，天穹集团的500万注资迅速到账，公司现金流危机暂时缓解。但协议条款苛刻：天穹获得董事会两个席位，并对重大决策有否决权。核心团队得知消息后士气受挫，首席工程师私下抱怨：'这不过是缓刑，我们迟早会失去灵魂。'行业媒体评价你'务实但缺乏魄力'，声望略有下降。天穹派来的监督官开始介入研发，要求调整'认知接口'方向以匹配集团战略，创新进度被迫放缓。然而，这笔资金让你有了喘息空间，父亲笔记中的'铰链'或许正在转动——但代价是什么？数字伦理委员会发来质询函，要求说明注资后的技术伦理保障；开源心智组织在暗网发布声明，谴责你'出卖技术理想'。\n\n[逻辑链] 1. 回顾历史：这是第一回合，玩家刚接手公司，面临三个初始选择。玩家选择了'接受天穹集团注资'。历史记录显示公司现金仅够维持半年，士气低落，天穹集团试图收购，数字伦理委员会持怀疑态度，开源心智组织在暗中破坏。2. 合规检查：玩家指令'接受天穹集团注资'是明确的决策指令，不是'效果类'或'预期类'指令，符合规则。3. 数学计算：基于当前属性Cash=800, Morale=40, Reputation=30, Innovation=15。根据公式：Cash_Next = 800 - 50 + (15*8) + (30*3) + Action_Effect_Cash。假设注资带来+500现金但-10士气（因团队担心失去控制权），-5声望（因被视为屈服于巨头），-5创新（因可能受制于集团战略）。Morale_Next = 40 - 3 + (800/100) + (-10) = 40-3+8-10=35。Reputation_Next = 30 - 2 + (15/5) + (-5) = 30-2+3-5=26。Innovation_Next = 15 - 1 + (40/20) + (-5) = 15-1+2-5=11。Cash_Next = 800 - 50 + 120 + 90 + 500 = 1460。4. 生成结果：结合卦象'水天需（等待时机）'，注资是等待时机的策略，带来短期资金但埋下长期隐患。"
+        },
+        {
+          "id": 1765975139,
+          "type": "player",
+          "playerId": "player_ai_tech",
+          "playerPosition": "cto",
+          "text": "CTO决策: "
+        },
+        {
+          "id": 1765975140,
+          "type": "system",
+          "text": "作为CTO，你站在研发实验室的中央，周围是闪烁的神经接口原型机。天穹集团的监督官刚刚离开，留下了一份'战略调整建议书'，要求将认知接口技术转向商业监控应用。首席工程师愤怒地摔下数据板：'这是出卖！父亲的技术是为了连接人类，不是监视他们！'团队士气在注资后持续低迷，而开源心智组织的暗网声明像幽灵般萦绕——'门扉科技已沦为资本的傀儡。'数字伦理委员会的质询函堆在桌上，要求你在十天内回应技术伦理问题。卦象'天水讼'预示着争执：是顺从天穹的压力，还是坚守技术理想？现金虽充裕，但创新停滞，声望受损。父亲笔记中的'铰链'似乎在锈蚀。你必须做出决策，否则公司将在内部冲突中分崩离析。\n\n[CTO逻辑链] 1. 回顾历史：上回合玩家作为CEO接受了天穹集团注资，获得500万现金但失去部分控制权，导致士气下降、声望受损、创新放缓。当前状态为Turn 2，属性：现金1300、士气35、声望26、创新11。卦象为'天水讼（争执）'，暗示冲突或争议。历史伏笔包括：天穹集团监督官介入研发、数字伦理委员会质询、开源心智组织谴责、核心团队士气低落。2. 合规检查：当前玩家指令为CTO: \"\"，这是一个空指令，不符合'决策'要求。根据规则，玩家必须提供明确的决策指令（如'降低售价'），而非空指令或效果类指令。因此需要等待有效指令。3. 数学计算：基于当前属性和公式，计算下回合基础数值变动（无决策影响时）：Cash_Next = 1300 - 50 + (11*8) + (26*3) + 0 = 1300 - 50 + 88 + 78 + 0 = 1416；Morale_Next = 35 - 3 + (1300/100) + 0 = 35 - 3 + 13 + 0 = 45；Reputation_Next = 26 - 2 + (11/5) + 0 = 26 - 2 + 2.2 + 0 = 26.2（取整26）；Innovation_Next = 11 - 1 + (35/20) + 0 = 11 - 1 + 1.75 + 0 = 11.75（取整12）。4. 生成结果：结合卦象'天水讼'和空指令，剧情应反映由注资引发的内部争执和等待决策的状态。"
+        },
+        {
+          "id": 1765975180,
+          "type": "player",
+          "playerId": "player_ai_market",
+          "playerPosition": "cmo",
+          "text": "CMO决策: "
+        },
+        {
+          "id": 1765975181,
+          "type": "system",
+          "text": "作为CMO，你站在市场部的数据墙前，屏幕上实时滚动着社交媒体舆情：'门扉科技接受天穹注资'的话题下，支持者称赞'务实求生'，反对者痛斥'技术背叛'。天穹集团的品牌总监发来合作邀约，提议联合发布'认知接口商业应用白皮书'，暗示这能提升市场信任。但开源心智组织的暗网声明像病毒般传播，已有三个潜在客户因'伦理担忧'暂停洽谈。数字伦理委员会的十天倒计时在角落闪烁，首席工程师冲进办公室：'如果我们妥协于监控应用，我会带领团队集体辞职！'卦象'水地比'在笔记中闪烁——父亲写道：'比者，亲也。但亲附非盲从，需以诚相待。'现金虽因注资充裕，但市场分裂，声誉徘徊不前。你必须做出决策：是顺应天穹推动商业化，还是公开回应伦理质疑重塑品牌？\n\n[CMO逻辑链] 1. 回顾历史：上回合玩家作为CEO接受了天穹集团注资，获得500万现金但失去部分控制权，导致士气下降、声望受损、创新放缓。当前状态为Turn 2，属性：现金1300、士气35、声望26、创新11。卦象为'水地比（亲密无间）'，暗示合作或亲密关系。历史伏笔包括：天穹集团监督官介入研发要求转向商业监控应用、数字伦理委员会质询函要求十天内回应技术伦理问题、开源心智组织在暗网谴责'出卖技术理想'、核心团队士气低落且首席工程师公开反对。2. 合规检查：当前玩家指令为CMO: \"\"，这是一个空指令，不符合'决策'要求。根据规则，玩家必须提供明确的决策指令（如'降低售价'），而非空指令或效果类指令。因此需要等待有效指令。3. 数学计算：基于当前属性和公式，计算下回合基础数值变动（无决策影响时）：Cash_Next = 1300 - 50 + (11*8) + (26*3) + 0 = 1300 - 50 + 88 + 78 + 0 = 1416；Morale_Next = 35 - 3 + (1300/100) + 0 = 35 - 3 + 13 + 0 = 45；Reputation_Next = 26 - 2 + (11/5) + 0 = 26 - 2 + 2.2 + 0 = 26.2（取整26）；Innovation_Next = 11 - 1 + (35/20) + 0 = 11 - 1 + 1.75 + 0 = 11.75（取整12）。4. 生成结果：结合卦象'水地比'和空指令，剧情应反映由注资引发的市场反应和等待决策的状态，强调亲密合作的可能性与当前冲突的对比。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "与天穹集团联合发布白皮书",
+          "desc": "接受天穹提议，共同发布认知接口商业应用白皮书，强调技术合规与市场前景。",
+          "predicted_effect": "现金+100（合作收入），士气-10（团队反对），声望+5（市场认可），创新-5（受制于商业导向）"
+        },
+        {
+          "id": "2",
+          "label": "公开回应数字伦理委员会质询",
+          "desc": "主动召开新闻发布会，详细说明技术伦理保障措施，直面开源心智的谴责。",
+          "predicted_effect": "现金-50（公关成本），士气+5（团队支持），声望+10（透明度提升），创新+2（伦理创新激励）"
+        },
+        {
+          "id": "3",
+          "label": "秘密接触开源心智组织",
+          "desc": "通过暗网渠道与开源心智组织对话，尝试解释技术理想并寻求和解。",
+          "predicted_effect": "现金-30（沟通成本），士气+15（团队鼓舞），声望-5（风险行为），创新+8（开放协作潜力）"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 0,
+        "expense_base": 50,
+        "passive_income": "Innovation * 8 + Reputation * 3",
+        "passive_cost": "50 + Morale/25"
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Value) + Reputation * 3 (Client_Attraction) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Industry_Pressure) + Cash/100 (Financial_Security) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Competition_Erosion) + Innovation/5 (Tech_Leadership) + Action_Effect_Reputation",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Knowledge_Decay) + Morale/20 (Team_Creativity) + Action_Effect_Innovation"
+      }
     }
   ]
 }
