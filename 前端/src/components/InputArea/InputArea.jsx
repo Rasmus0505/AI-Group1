@@ -30,7 +30,7 @@ export default function InputArea({ options, onExecute }) {
         }
         
         // 提交所有决策信息
-        onExecute(selectedOptions, inputText);
+        onExecute(selectedOptions, inputText, "player_human", "ceo");
         
         // 重置状态
         setSelectedOptions([]);

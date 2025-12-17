@@ -11,6 +11,26 @@ export const initialState = {
     },
     activeEvents: [], // 当前活跃事件
     systemPrompts: [], // 待注入的系统提示
+    players: [
+        {
+            id: "player_human",
+            name: "CEO (你)",
+            type: "human",
+            position: "ceo"
+        },
+        {
+            id: "player_ai_tech",
+            name: "CTO (AI)",
+            type: "ai",
+            position: "cto"
+        },
+        {
+            id: "player_ai_market",
+            name: "CMO (AI)",
+            type: "ai",
+            position: "cmo"
+        }
+    ],
     history: [
         {
             id: 0,
