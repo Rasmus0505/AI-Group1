@@ -774,6 +774,84 @@
         "reputation_rule": "Reputation_Next = Reputation - (Morale < 30 ? 3 : 0) (Rumor Penalty) + (Innovation / 5) (Tech Buzz) + Action_Effect",
         "innovation_rule": "Innovation_Next = Innovation - (Cash < 300 ? 2 : 0) (Funding Shortfall) + (Morale / 10) (Team Creativity) + Action_Effect"
       }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 800,
+        "morale": 60,
+        "reputation": 40,
+        "innovation": 15
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1765976129,
+          "type": "system",
+          "text": "在2045年的新深圳，你创立了'门墙科技'——一家专注于'认知界面'的初创公司。这个世界正经历着'数字鸿沟2.0'：巨型企业'天穹集团'垄断了脑机接口的高端市场，而地下黑客组织'破壁者'则用开源技术对抗着数字霸权。你的公司夹在中间，既需要天穹的技术授权，又依赖破壁者的社区支持。更复杂的是，政府监管机构'数字伦理委员会'正密切关注着认知技术的伦理边界。你掌握着一项突破性技术：'隐喻引擎'，能将抽象思维转化为可视化界面，但这技术既是商机也是风险。天穹想收购你，破壁者想合作开源，委员会在观察你。公司只有10人团队，资金即将耗尽，而第一次产品演示将在三个月后举行。此刻，你坐在简陋的办公室，窗外是霓虹闪烁的科技园区，你知道每一个决策都可能让公司崛起或崩塌。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "接受天穹集团的初步投资",
+          "desc": "与天穹集团签署初步投资协议，获得300现金，但需共享部分技术专利。",
+          "predicted_effect": "Cash +300, Reputation +15, Innovation -5 (技术控制风险)"
+        },
+        {
+          "id": "2",
+          "label": "与破壁者组织合作开发",
+          "desc": "加入破壁者的开源社区，获得技术支持但放弃部分商业权益。",
+          "predicted_effect": "Innovation +10, Morale +10 (团队使命感), Cash -100 (投入资源)"
+        },
+        {
+          "id": "3",
+          "label": "提前举办小型产品演示",
+          "desc": "邀请潜在客户和媒体，提前展示'隐喻引擎'原型。",
+          "predicted_effect": "Reputation +20, Cash -150 (活动成本), Morale -5 (时间压力)"
+        },
+        {
+          "id": "4",
+          "label": "优化内部开发流程",
+          "desc": "重组团队结构，引入敏捷开发方法。",
+          "predicted_effect": "Morale +15 (效率提升), Innovation +5, Cash -50 (培训成本)"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 0,
+        "expense_base": 50,
+        "morale_decay": 3,
+        "reputation_decay": 2,
+        "innovation_decay": 1
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Value) + Reputation * 3 (Investor_Interest) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 3 (Burnout_Rate) + Cash/100 (Financial_Security) + Action_Effect",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Market_Forgetfulness) + Innovation/5 (Tech_Buzz) + Action_Effect",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Knowledge_Decay) + Morale/20 (Team_Creativity) + Action_Effect"
+      }
     }
   ]
 }
