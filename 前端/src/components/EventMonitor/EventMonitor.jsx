@@ -17,16 +17,20 @@ export function EventMonitor() {
         events: []
     })
 
-    // 每次状态改变时更新显示
+    // 监听事件系统的变化，每秒更新一次
     useEffect(() => {
         const updateDisplay = () => {
             setEventSummary(eventManager.getEventSummary())
         }
 
+        // 初始更新
         updateDisplay()
-        // 如果需要实时更新，可以设置定时器
-        // const timer = setInterval(updateDisplay, 1000)
-        // return () => clearInterval(timer)
+
+        // 设置实时更新定时器 - 每1000ms更新一次
+        const timer = setInterval(updateDisplay, 1000)
+        
+        // 清理定时器
+        return () => clearInterval(timer)
     }, [])
 
     if (eventSummary.activeCount === 0) {

@@ -4,11 +4,13 @@ import TeamList from './components/TeamList/TeamList';
 import Terminal from './components/Terminal/Terminal';
 import InputArea from './components/InputArea/InputArea';
 import EventLog from './components/EventLog/EventLog';
+import { EventMonitor } from './components/EventMonitor/EventMonitor';
 import { initGame, sendAction, sendActionStream, configureApi } from './engine/api';
 // Re-import local engine for Demo Mode
 import { initialState, processDecision } from './engine/gameLogic';
 import { mockAI } from './engine/mockAI';
 import { helpContent } from './engine/helpContent';
+import { eventManager } from './engine/eventSystem';
 import './index.css';
 
 // Default state to prevent UI crash before API loads
@@ -809,6 +811,8 @@ function App() {
           <Dashboard attributes={gameState.attributes} deltas={deltas} />
 
           <TeamList players={gameState.players} />
+
+          <EventMonitor />
 
           <EventLog events={events} />
 
