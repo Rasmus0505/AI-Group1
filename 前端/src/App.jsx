@@ -575,8 +575,7 @@ function App() {
         };
 
         // Streaming Handler (V4.0)
-        let streamingNarrative = "";
-        let streamingId = Date.now() + 100;
+        const streamingBuffers = {}; // streamId -> text
 
         await sendActionStream(action, (chunk) => {
           // Handle Stream Events from Backend
@@ -598,20 +597,41 @@ function App() {
               history: [...prev.history, { id: Date.now(), type: 'system', text: "🧠 逻辑推演完成", logicChain: chunk.content }]
             }));
           }
+          else if (chunk.type === 'player') {
+            // Player / AI decision line
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id: Date.now(), type: 'player', text: chunk.text }]
+            }));
+          }
+          else if (chunk.type === 'narrative_begin') {
+            // Start a new streaming narrative block (per agent)
+            const id = chunk.streamId || Date.now();
+            streamingBuffers[id] = "";
+            const header = chunk.actor ? `【${chunk.actor}】` : "";
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id, type: 'system', text: header, isStreaming: true }]
+            }));
+          }
           else if (chunk.type === 'token') {
             // Narrative Streaming (Typewriter effect)
-            streamingNarrative += chunk.content;
+            const sid = chunk.streamId;
+            if (!sid) return;
+            streamingBuffers[sid] = (streamingBuffers[sid] || "") + chunk.content;
 
             // Update the last "streaming" message or add new one
             setGameState(prev => {
               const history = [...prev.history];
-              const last = history[history.length - 1];
-              if (last && last.isStreaming) {
-                last.text = streamingNarrative;
+              const idx = history.findIndex(h => h.id === sid);
+              if (idx >= 0) {
+                const base = history[idx].text && history[idx].isStreaming ? history[idx].text : "";
+                // Preserve header (e.g., 【CEO】) if present as prefix
+                const header = base.startsWith("【") && base.includes("】") ? base.slice(0, base.indexOf("】") + 1) : "";
+                history[idx] = { ...history[idx], text: header + streamingBuffers[sid] };
                 return { ...prev, history };
-              } else {
-                return { ...prev, history: [...history, { id: streamingId, type: 'system', text: streamingNarrative, isStreaming: true }] };
               }
+              return prev;
             });
           }
           else if (chunk.type === 'done') {

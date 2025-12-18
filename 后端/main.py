@@ -1,11 +1,14 @@
 from fastapi import FastAPI, HTTPException, Header
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Annotated
 import uvicorn
 import time
 import os
 import sys
+import json
 
 # Custom Modules
 from cloud_connector import CloudBridge
@@ -175,16 +178,12 @@ def init_game(payload: InitSettings, authorization: Annotated[str | None, Header
 
 import asyncio
 
-<<<<<<< HEAD
-from fastapi.responses import StreamingResponse
-
 @app.post("/api/action")
-async def process_action(action: PlayerAction, authorization: Annotated[str | None, Header()] = None):
-=======
-@app.post("/api/action")
-async def process_action(action: PlayerAction, authorization: Annotated[str | None, Header()] = None):
-    # Get Key from Header
->>>>>>> origin/main
+async def process_action(
+    action: PlayerAction,
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+):
     api_key = get_api_key(authorization)
     game_id = action.gameId
     
@@ -200,116 +199,192 @@ async def process_action(action: PlayerAction, authorization: Annotated[str | No
         "formulas": last_state_doc.get("formulas", "")
     }
     
-<<<<<<< HEAD
-    # Construct User Input
-=======
     initial_attributes = current_state["attributes"].copy()
+    accept = (request.headers.get("accept") or "").lower()
+    wants_stream = "text/event-stream" in accept
 
-    # 2. Call LLM for human player (CEO)
-    # Combine user inputs (Option + Custom Text)
->>>>>>> origin/main
     input_parts = []
     if action.label and action.label != "Custom Directive":
         input_parts.append(f"执行选项: [{action.label}]")
     if action.customText:
         input_parts.append(f"额外指令: {action.customText}")
-<<<<<<< HEAD
-    user_input = " + ".join(input_parts) if input_parts else "无操作"
-
-    async def event_generator():
-        # --- PHASE 1: The Analyst (Logic) ---
-        yield f"data: {json.dumps({'type': 'log', 'content': '📡 Connecting to Nexus-Link Analyst...'})}\n\n"
-        
-        analyst_result = await LLMEngine.analyze_logic_async(current_state, user_input, api_key, action.playerPosition)
-        
-        # Process Logic Result
-        changes = analyst_result.get("attribute_changes", {})
-        logic_chain = analyst_result.get("logic_chain", "")
-        event_summary = analyst_result.get("event_summary", "")
-        
-        # Apply Deltas
-        new_attributes = current_state["attributes"].copy()
-        for key, val in changes.items():
-            if key in new_attributes:
-                new_attributes[key] += val
-                new_attributes[key] = max(0, new_attributes[key])
-                
-        # Send Deltas to Client (Instant Feedback)
-        deltas = {}
-        for key in new_attributes:
-            diff = new_attributes[key] - current_state["attributes"].get(key, 0)
-            if diff != 0: deltas[key] = diff
-            
-        yield f"data: {json.dumps({'type': 'delta', 'data': deltas})}\n\n"
-        yield f"data: {json.dumps({'type': 'log', 'content': '✅ Logic Validated. Applying effects...'})}\n\n"
-        if logic_chain:
-            yield f"data: {json.dumps({'type': 'thought', 'content': logic_chain})}\n\n"
-
-        # --- PHASE 2: The Narrator (Streaming) ---
-        yield f"data: {json.dumps({'type': 'log', 'content': '📖 Narrator Engine engaged. Generating story...'})}\n\n"
-        
-        # Note: stream_narrative is synchronous generator, but we run in thread if needed. 
-        # For simplicity, we iterate the generator directly as it yields chunks.
-        # However, OpenAI stream is synchronous in python client unless using AsyncClient.
-        # We'll use the sync client iterator but pump it here.
-        
-        narrator_stream = LLMEngine.stream_narrative(current_state, analyst_result, user_input, api_key)
-        
-        full_narrative = ""
-        full_json_buffer = "" # To capture the full JSON output of Narrator
-        
-        for chunk in narrator_stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                # Narrator outputs JSON. We want to extract the "narrative" field to stream to user?
-                # Actually, Narrator is asked to output JSON. Streaming JSON is hard to parse for "text".
-                # BETTER APPROACH: Narrator Prompt should output pure text first, then JSON options?
-                # OR we try to parse it on frontend?
-                # FOR ROBUSTNESS in V4.0: Let's assume Narrator outputs formatted JSON text. 
-                # We will send raw tokens to frontend, and frontend accumulates them.
-                # BUT improving this: modifying Narrator prompt slightly to output Narrative TEXT first, then JSON options block? 
-                # Let's stick to raw JSON streaming for now, and Frontend will parse the final block.
-                # WAIT: User wants "Typewriter effect". Streaming raw JSON `{"narrative": "..."}` looks bad.
-                # Let's trust the frontend to handle partial JSON or simply Accumulate until "narrative" field is complete? 
-                # No, that defeats the purpose.
-                
-                # ADAPTATION: We will treat the stream as a raw buffer.
-                full_json_buffer += content
-                yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-
-        # --- PHASE 3: Finalize & Persist ---
-        # Parse the full JSON from Narrator
-        try:
-            narrator_data = json.loads(full_json_buffer)
-            final_options = narrator_data.get("next_options", [])
-            narrative_text = narrator_data.get("narrative", "")
-        except:
-            print("Failed to parse Narrator JSON")
-            narrative_text = full_json_buffer # Fallback
-            final_options = []
-
-        # Save to DB
-        new_history = current_state["history"].copy()
-        new_history.append({"id": int(time.time()), "type": "player", "text": f"决策: {user_input}"})
-        new_history.append({"id": int(time.time())+1, "type": "system", "text": narrative_text, "logicChain": logic_chain})
-        
-        new_doc = {
-            "game_id": game_id,
-            "turn": current_state["turn"] + 1,
-            "attributes": new_attributes,
-            "history": new_history,
-            "current_options": final_options,
-            "formulas": current_state["formulas"]
-        }
-        db.push_new_state(new_doc)
-        
-        # Send Final State Update
-        yield f"data: {json.dumps({'type': 'done', 'state': new_doc, 'event_summary': event_summary})}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-=======
     
     user_input = " + ".join(input_parts) if input_parts else "无操作"
+
+    # --- Streaming Mode (SSE over POST) ---
+    if wants_stream:
+        async def event_generator():
+            # --- PHASE 1: CEO Analyst (Logic) ---
+            yield f"data: {json.dumps({'type': 'log', 'content': '📡 Connecting to Nexus-Link Analyst...'})}\n\n"
+
+            analyst_result = await LLMEngine.analyze_logic_async(
+                current_state,
+                user_input,
+                api_key,
+                action.playerPosition,
+            )
+
+            changes = analyst_result.get("attribute_changes", {})
+            logic_chain = analyst_result.get("logic_chain", "")
+            event_summary = analyst_result.get("event_summary", "")
+
+            new_attributes = current_state["attributes"].copy()
+            for key, val in changes.items():
+                if key in new_attributes:
+                    new_attributes[key] += val
+                    new_attributes[key] = max(0, new_attributes[key])
+
+            # Send Deltas to Client (Instant Feedback)
+            deltas = {}
+            for key in new_attributes:
+                diff = new_attributes[key] - current_state["attributes"].get(key, 0)
+                if diff != 0:
+                    deltas[key] = diff
+
+            yield f"data: {json.dumps({'type': 'delta', 'data': deltas})}\n\n"
+            yield f"data: {json.dumps({'type': 'log', 'content': '✅ Logic Validated. Applying effects...'})}\n\n"
+            if logic_chain:
+                yield f"data: {json.dumps({'type': 'thought', 'content': f'[{action.playerPosition.upper()}] ' + logic_chain})}\n\n"
+
+            # --- PHASE 2: CEO Narrative (Streaming) ---
+            yield f"data: {json.dumps({'type': 'log', 'content': '📖 Narrator Engine engaged. Generating story...'})}\n\n"
+
+            stream_id = int(time.time() * 1000)
+            yield f"data: {json.dumps({'type': 'narrative_begin', 'streamId': stream_id, 'actor': 'CEO'})}\n\n"
+
+            narrator_stream = LLMEngine.stream_narrative_text(current_state, analyst_result, user_input, api_key)
+            narrative_text = ""
+
+            for chunk in narrator_stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    narrative_text += content
+                    yield f"data: {json.dumps({'type': 'token', 'content': content, 'streamId': stream_id})}\n\n"
+
+            # --- PHASE 3: Finalize & Persist ---
+            # We'll generate options after all agents finish (CEO + AI roles)
+
+            new_history = current_state["history"].copy()
+            new_history.append({
+                "id": int(time.time()),
+                "type": "player",
+                "playerId": action.playerId,
+                "playerPosition": action.playerPosition,
+                "text": f"决策: {user_input}",
+            })
+            system_entry = {
+                "id": int(time.time()) + 1,
+                "type": "system",
+                "text": narrative_text,
+            }
+            if logic_chain:
+                system_entry["logicChain"] = logic_chain
+            new_history.append(system_entry)
+
+            # --- PHASE 4: Trigger AI players (CTO/CMO) and stream their outputs ---
+            final_options = []
+            if action.playerPosition == "ceo":
+                # AI players see the state AFTER CEO move
+                ai_state = {
+                    "attributes": new_attributes,
+                    "history": new_history,
+                    "turn": current_state["turn"] + 1,
+                    "formulas": current_state["formulas"],
+                }
+
+                async def run_ai(position: str, role_label: str):
+                    nonlocal new_attributes, new_history, final_options
+
+                    yield f"data: {json.dumps({'type': 'log', 'content': f'🤖 {role_label} 正在生成决策...'})}\n\n"
+                    decision = await LLMEngine.generate_ai_decision_async(ai_state, position, api_key)
+                    yield f"data: {json.dumps({'type': 'player', 'text': f'{role_label}决策: {decision}'})}\n\n"
+
+                    ai_analyst = await LLMEngine.analyze_logic_async(ai_state, decision, api_key, position)
+                    ai_changes = ai_analyst.get("attribute_changes", {}) or {}
+                    ai_logic_chain = ai_analyst.get("logic_chain", "")
+
+                    # Apply attribute changes
+                    before = new_attributes.copy()
+                    for k, v in ai_changes.items():
+                        if k in new_attributes:
+                            new_attributes[k] += v
+                            new_attributes[k] = max(0, new_attributes[k])
+
+                    # Delta vs before this AI step
+                    ai_deltas = {}
+                    for k in new_attributes:
+                        diff = new_attributes[k] - before.get(k, 0)
+                        if diff != 0:
+                            ai_deltas[k] = diff
+                    if ai_deltas:
+                        yield f"data: {json.dumps({'type': 'delta', 'data': ai_deltas})}\n\n"
+
+                    if ai_logic_chain:
+                        yield f"data: {json.dumps({'type': 'thought', 'content': f'[{role_label}] ' + ai_logic_chain})}\n\n"
+
+                    # Stream narrative text for this AI role
+                    ai_stream_id = int(time.time() * 1000) + (0 if position == "cto" else 1)
+                    yield f"data: {json.dumps({'type': 'narrative_begin', 'streamId': ai_stream_id, 'actor': role_label})}\n\n"
+                    ai_narr_stream = LLMEngine.stream_narrative_text(ai_state, ai_analyst, decision, api_key)
+                    ai_text = ""
+                    for ch in ai_narr_stream:
+                        c = ch.choices[0].delta.content
+                        if c:
+                            ai_text += c
+                            yield f"data: {json.dumps({'type': 'token', 'content': c, 'streamId': ai_stream_id})}\n\n"
+
+                    # Append to history
+                    base_id = int(time.time() * 1000)
+                    new_history.append({
+                        "id": base_id,
+                        "type": "player",
+                        "playerId": f"player_ai_{position}",
+                        "playerPosition": position,
+                        "text": f"{role_label}决策: {decision}",
+                    })
+                    sys_entry = {"id": base_id + 1, "type": "system", "text": ai_text}
+                    if ai_logic_chain:
+                        sys_entry["logicChain"] = ai_logic_chain
+                    new_history.append(sys_entry)
+
+                    # Update ai_state for next AI role
+                    ai_state["attributes"] = new_attributes
+                    ai_state["history"] = new_history
+                    ai_state["turn"] = ai_state["turn"] + 1
+
+                # Run CTO then CMO sequentially for stable stream order
+                async for evt in run_ai("cto", "CTO"):
+                    yield evt
+                async for evt in run_ai("cmo", "CMO"):
+                    yield evt
+
+                # Generate next options for the next CEO turn based on latest state
+                final_state_for_options = {
+                    "attributes": new_attributes,
+                    "history": new_history,
+                    "turn": current_state["turn"] + 2,
+                    "formulas": current_state["formulas"],
+                }
+                final_options = LLMEngine.generate_next_options(final_state_for_options, analyst_result, user_input, api_key)
+
+            # Persist final doc after all agents
+            new_doc = {
+                "game_id": game_id,
+                "round_id": last_state_doc.get("round_id", 0) + 1,
+                "company_name": last_state_doc.get("company_name"),
+                "turn": current_state["turn"] + 1,
+                "attributes": new_attributes,
+                "players": last_state_doc.get("players", []),
+                "history": new_history,
+                "current_options": final_options,
+                "passive_rules": last_state_doc.get("passive_rules", {}),
+                "formulas": current_state["formulas"],
+            }
+            db.push_new_state(new_doc)
+
+            yield f"data: {json.dumps({'type': 'done', 'state': new_doc, 'event_summary': event_summary})}\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
     
     print(f"[{STORAGE_MODE}] Action: {user_input} (Position: {action.playerPosition})")
     
@@ -463,7 +538,6 @@ async def process_action(action: PlayerAction, authorization: Annotated[str | No
         "deltas": deltas,  # Return deltas to frontend
         "event_summary": event_summary # Return event summary
     }
->>>>>>> origin/main
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

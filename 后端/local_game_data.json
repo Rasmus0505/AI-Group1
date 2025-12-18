@@ -4036,7 +4036,6 @@
         "reputation_rule": "Reputation_Next = Reputation - 3 (Ethical_Decay) + Innovation/5 (Breakthrough_Prestige) + Action_Effect_Reputation",
         "innovation_rule": "Innovation_Next = Innovation - 2 (Knowledge_Obsolescence) + Morale/10 (Team_Creativity) + Action_Effect_Innovation"
       }
-<<<<<<< HEAD
     },
     {
       "game_id": "default_room",
@@ -4239,8 +4238,554 @@
         "reputation_rule": "Reputation_Next = Reputation - 3 (Ethical_Decay) + Innovation/5 (Breakthrough_Prestige) + Action_Effect_Reputation",
         "innovation_rule": "Innovation_Next = Innovation - 2 (Knowledge_Obsolescence) + Morale/10 (Team_Creativity) + Action_Effect_Innovation"
       }
-=======
->>>>>>> origin/main
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 800,
+        "morale": 60,
+        "reputation": 30,
+        "innovation": 15
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766062635,
+          "type": "system",
+          "text": "在2045年的新深圳，你创立了'门墙科技'——一家专注于量子加密与意识接口的初创公司。全球科技巨头'天穹集团'垄断了90%的神经接口市场，而地下黑客组织'破壁者'则不断挑战现有加密体系。你的公司夹在两者之间：天穹试图收购或摧毁你，破壁者想利用你的技术颠覆现有秩序。政府监管机构'网安局'则密切关注，既希望本土创新崛起，又担忧技术失控。你的第一个产品'意识锁'原型刚刚完成，这是一个能通过脑波生成动态密码的系统。此刻，天穹发来了收购邀约，破壁者暗中联系希望合作，网安局要求进行安全审查。公司账户仅有启动资金，团队士气高昂但经验不足，行业声望尚未建立，创新是你的唯一优势。每堵墙都可能是突破的门，每个决策都将引发连锁反应——周易卦象将揭示隐藏的变数，而半年的时间跨度让你必须权衡短期生存与长期愿景。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "接受天穹收购谈判",
+          "desc": "与天穹集团进行初步收购谈判，获取资金注入但可能失去控制权",
+          "cost": 50,
+          "cost_desc": "法律顾问与谈判团队：50",
+          "predicted_effect": "Cash +200, Morale -10 (团队担忧), Reputation +15 (行业关注), Innovation -5 (可能被限制)"
+        },
+        {
+          "id": "2",
+          "label": "秘密会见破壁者代表",
+          "desc": "在地下加密聊天室与破壁者技术主管会面，探索合作可能",
+          "cost": 30,
+          "cost_desc": "安全通信与匿名会议：30",
+          "predicted_effect": "Cash -30, Morale +5 (刺激感), Reputation -10 (风险), Innovation +8 (黑客技术注入)"
+        },
+        {
+          "id": "3",
+          "label": "主动邀请网安局审查",
+          "desc": "公开邀请网络安全局进行技术审查，建立合规形象",
+          "cost": 80,
+          "cost_desc": "审查准备与合规改造：80",
+          "predicted_effect": "Cash -80, Morale -5 (压力), Reputation +20 (官方认可), Innovation +3 (合规优化)"
+        },
+        {
+          "id": "4",
+          "label": "举办技术发布会",
+          "desc": "独立举办'意识锁'产品发布会，直接面向市场",
+          "cost": 120,
+          "cost_desc": "场地、宣传、演示设备：120",
+          "predicted_effect": "Cash -120, Morale +15 (成就感), Reputation +25 (市场曝光), Innovation +10 (用户反馈驱动)"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 0,
+        "expense_base": 50,
+        "innovation_decay": 1,
+        "reputation_decay": 2,
+        "morale_burnout": 3
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Value) + Reputation * 3 (Contract_Bonus) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Burnout) + Cash/100 (Stability_Bonus) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Decay) + Innovation/5 (Tech_Influence) + Action_Effect_Rep",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Obsolete) + Morale/20 (Team_Creativity) + Action_Effect_Innov"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 2,
+      "company_name": "Nexus Corp",
+      "turn": 2,
+      "attributes": {
+        "cash": 460,
+        "morale": 70,
+        "reputation": 36,
+        "innovation": 22
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766062635,
+          "type": "system",
+          "text": "在2045年的新深圳，你创立了'门墙科技'——一家专注于量子加密与意识接口的初创公司。全球科技巨头'天穹集团'垄断了90%的神经接口市场，而地下黑客组织'破壁者'则不断挑战现有加密体系。你的公司夹在两者之间：天穹试图收购或摧毁你，破壁者想利用你的技术颠覆现有秩序。政府监管机构'网安局'则密切关注，既希望本土创新崛起，又担忧技术失控。你的第一个产品'意识锁'原型刚刚完成，这是一个能通过脑波生成动态密码的系统。此刻，天穹发来了收购邀约，破壁者暗中联系希望合作，网安局要求进行安全审查。公司账户仅有启动资金，团队士气高昂但经验不足，行业声望尚未建立，创新是你的唯一优势。每堵墙都可能是突破的门，每个决策都将引发连锁反应——周易卦象将揭示隐藏的变数，而半年的时间跨度让你必须权衡短期生存与长期愿景。"
+        },
+        {
+          "id": 1766062670,
+          "type": "player",
+          "playerId": "player_human",
+          "playerPosition": "ceo",
+          "text": "决策: 执行选项: [秘密会见破壁者代表, 举办技术发布会]"
+        },
+        {
+          "id": 1766062671,
+          "type": "system",
+          "text": "```json\n{\n    \"narrative\": \"深夜，你驱车前往废弃工厂会见破壁者代表，对方展示的量子加密技术让你心跳加速。三周后，你在科技园区举办发布会，镁光灯下展示的‘门’原型机引发轰动。然而，行业媒体开始质疑你的技术来源，竞争对手‘天穹科技’的CEO在社交媒体上暗示‘某些新贵走捷径’。公司内部，工程师们既兴奋于技术突破，又担忧着潜在的伦理争议。水雷屯卦象显现——开局虽成，暗流已涌。\",\n    \"next_options\": [\n        {\n            \"id\": \"1\",\n            \"label\": \"公开技术合作细节\",\n            \"desc\": \"召开记者会澄清技术来源，公布与破壁者的合法合作框架\",\n            \"cost\": 200,\n            \"cost_desc\": \"法律团队费用+公关活动\",\n            \"predicted_effect\": \"声望大幅提升，但可能暴露更多商业机密\"\n        },\n        {\n            \"id\": \"2\",\n            \"label\": \"加速产品迭代\",\n            \"desc\": \"将现有资金投入研发，赶在质疑发酵前推出2.0版本\",\n            \"cost\": 300,\n            \"cost_desc\": \"研发团队加班+实验材料\",\n            \"predicted_effect\": \"创新显著提升，但现金压力增大\"\n        },\n        {\n            \"id\": \"3\",\n            \"label\": \"反向调查竞争对手\",\n            \"desc\": \"雇佣商业情报团队收集天穹科技的不当竞争证据\",\n            \"cost\": 150,\n            \"cost_desc\": \"情报费用+法律咨询\",\n            \"predicted_effect\": \"可能获得反击筹码，但存在法律风险\"\n        },\n        {\n            \"id\": \"4\",\n            \"label\": \"启动员工持股计划\",\n            \"desc\": \"用股权激励稳定核心团队，抵御外部挖角\",\n            \"cost\": 100,\n            \"cost_desc\": \"股权稀释+方案设计费\",\n            \"predicted_effect\": \"士气大幅提升，长期可能影响控制权\"\n        }\n    ]\n}\n```",
+          "logicChain": "1. 玩家指令分析：玩家指令包含两个明确决策行动：'秘密会见破壁者代表'和'举办技术发布会'，均为有效决策指令。2. 成本计算：秘密会见需要隐蔽行动费用，推断现金-100；举办技术发布会需要场地、宣传等费用，推断现金-400。两项行动合计现金成本-500。会见破壁者可能提升创新但降低声望，推断创新+5、声望-5；技术发布会展示产品可能提升声望和士气，推断声望+10、士气+5。3. 结果：结合基础公式计算，现金=800-50+15*8+30*3-500=800-50+120+90-500=460；士气=60-3+800/100+5=60-3+8+5=70；声望=30-2+15/5+10-5=30-2+3+10-5=36；创新=15-1+60/20+5=15-1+3+5=22。"
+        }
+      ],
+      "current_options": [],
+      "passive_rules": {
+        "income_base": 0,
+        "expense_base": 50,
+        "innovation_decay": 1,
+        "reputation_decay": 2,
+        "morale_burnout": 3
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Value) + Reputation * 3 (Contract_Bonus) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Burnout) + Cash/100 (Stability_Bonus) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Decay) + Innovation/5 (Tech_Influence) + Action_Effect_Rep",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Obsolete) + Morale/20 (Team_Creativity) + Action_Effect_Innov"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1200,
+        "morale": 40,
+        "reputation": 30,
+        "innovation": 15
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766063064,
+          "type": "system",
+          "text": "在2045年的新深圳，你继承了父亲留下的‘破壁科技’——一家曾经辉煌但如今濒临倒闭的脑机接口初创公司。父亲因一场神秘的实验室事故去世，留下的不仅是债务，还有未完成的‘意识上传’原型机。公司位于南山科技园边缘的旧写字楼，员工仅剩七人：愤世嫉俗的首席工程师老陈、梦想成为艺术家的程序员小雨、总在算命的财务阿卦、以及四名犹豫去留的实习生。\n\n多方博弈的暗流早已涌动：跨国巨头‘神经元集团’正通过猎头秘密挖角你的团队，其副总裁张薇多次暗示收购意向；本地创投‘深港资本’承诺注资，但要求你放弃父亲的核心研究，转向娱乐化脑机游戏；地下黑客组织‘开源意识’在暗网联系你，声称拥有父亲事故的真相数据，条件是共享技术源码。更诡异的是，市科技局的李处长突然到访，委婉提醒你‘某些研究触及红线’，而办公室每夜出现的加密传真，落款竟是父亲生前使用的代号‘守门人’。\n\n此刻，公司账户仅剩三个月现金流，老陈在实验室酗酒，小雨偷偷投递了简历，阿卦用铜钱占卜后脸色发白。窗外的霓虹映着‘凡墙皆是门’的斑驳标语——这是父亲刻在会议室墙上的话。你知道，下个决定将撬动所有暗桩：是向资本妥协，是追寻真相，还是赌上一切完成那台可能改变人类的机器？第一缕晨光照进时，传真机再次吐出带血指纹的纸页：‘他们不是要收购，是要埋葬。’"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "接受深港资本的投资",
+          "desc": "签署对赌协议，获得300万现金，但必须放弃意识上传研究，转向脑机游戏开发。",
+          "cost": 0,
+          "cost_desc": "无直接成本，但永久失去父亲的核心技术方向",
+          "predicted_effect": "Cash +300, Morale -15 (团队失望), Reputation +20 (资本认可), Innovation -10 (研究方向转变)"
+        },
+        {
+          "id": "2",
+          "label": "联系开源意识组织",
+          "desc": "秘密会面黑客组织，获取父亲事故数据，以技术开源为交换条件。",
+          "cost": 200,
+          "cost_desc": "安全屋租赁与加密通信设备：200",
+          "predicted_effect": "Cash -200, Morale +5 (追寻真相), Reputation -10 (法律风险), Innovation +15 (获得隐藏数据)"
+        },
+        {
+          "id": "3",
+          "label": "举办全员危机会议",
+          "desc": "公开公司困境，让团队投票决定未来方向，可能引发分裂或团结。",
+          "cost": 50,
+          "cost_desc": "会议室点心与材料：50",
+          "predicted_effect": "Cash -50, Morale ±20 (随机波动), Reputation +5 (透明形象), Innovation +5 (集体智慧)"
+        },
+        {
+          "id": "4",
+          "label": "独自研究加密传真",
+          "desc": "破译父亲遗留的线索，可能发现实验室事故真相或隐藏资产。",
+          "cost": 100,
+          "cost_desc": "密码学软件与历史档案查询：100",
+          "predicted_effect": "Cash -100, Morale -5 (孤立行动), Reputation 0, Innovation +25 (突破性发现概率30%)"
+        }
+      ],
+      "passive_rules": {
+        "income_base": "Innovation * 8 scaled by Reputation%",
+        "expense_base": 50,
+        "fatigue_decay": 3,
+        "market_forget": 1,
+        "knowledge_depreciation": 2
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + (Innovation * 8) * (Reputation / 100) (Passive_Income) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Fatigue_Decay) + (Cash_Change / 100) * 2 (Financial_Impact) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 1 (Market_Forget) + (Innovation * 0.5) * (Morale / 100) (Breakthrough_Bonus) + Action_Effect_Reputation",
+        "innovation_rule": "Innovation_Next = Innovation - 2 (Knowledge_Depreciation) + (Morale / 10) * (Cash / 1000) (Resource_Boost) + Action_Effect_Innovation"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 2,
+      "company_name": "Nexus Corp",
+      "turn": 2,
+      "attributes": {
+        "cash": 1000,
+        "morale": 35,
+        "reputation": 30,
+        "innovation": 12
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766063064,
+          "type": "system",
+          "text": "在2045年的新深圳，你继承了父亲留下的‘破壁科技’——一家曾经辉煌但如今濒临倒闭的脑机接口初创公司。父亲因一场神秘的实验室事故去世，留下的不仅是债务，还有未完成的‘意识上传’原型机。公司位于南山科技园边缘的旧写字楼，员工仅剩七人：愤世嫉俗的首席工程师老陈、梦想成为艺术家的程序员小雨、总在算命的财务阿卦、以及四名犹豫去留的实习生。\n\n多方博弈的暗流早已涌动：跨国巨头‘神经元集团’正通过猎头秘密挖角你的团队，其副总裁张薇多次暗示收购意向；本地创投‘深港资本’承诺注资，但要求你放弃父亲的核心研究，转向娱乐化脑机游戏；地下黑客组织‘开源意识’在暗网联系你，声称拥有父亲事故的真相数据，条件是共享技术源码。更诡异的是，市科技局的李处长突然到访，委婉提醒你‘某些研究触及红线’，而办公室每夜出现的加密传真，落款竟是父亲生前使用的代号‘守门人’。\n\n此刻，公司账户仅剩三个月现金流，老陈在实验室酗酒，小雨偷偷投递了简历，阿卦用铜钱占卜后脸色发白。窗外的霓虹映着‘凡墙皆是门’的斑驳标语——这是父亲刻在会议室墙上的话。你知道，下个决定将撬动所有暗桩：是向资本妥协，是追寻真相，还是赌上一切完成那台可能改变人类的机器？第一缕晨光照进时，传真机再次吐出带血指纹的纸页：‘他们不是要收购，是要埋葬。’"
+        },
+        {
+          "id": 1766063113,
+          "type": "player",
+          "playerId": "player_human",
+          "playerPosition": "ceo",
+          "text": "决策: 执行选项: [联系开源意识组织, 举办全员危机会议, 独自研究加密传真]"
+        },
+        {
+          "id": 1766063114,
+          "type": "system",
+          "text": "你咬牙同时推进三件事：技术部熬夜联系开源组织，却因沟通不畅消耗了研发精力；全员大会上你慷慨激昂，现金如流水般花在场地和激励奖金上，员工们短暂振奋后却更显疲惫；深夜独自破译传真密码，熬得双眼通红，只看出片段加密坐标。资源在多方拉扯中快速消耗，公司账面现金锐减，团队士气不升反降。传真机突然吐出半张烧焦的地图残片，指向城郊废弃工厂——那里似乎藏着什么。",
+          "logicChain": "1. 玩家指令分析：玩家同时执行三个选项，属于非标准决策。指令均为具体行动（联系组织、举办会议、研究传真），符合决策类要求。2. 成本计算：联系开源意识组织需要技术资源（创新成本），举办全员危机会议消耗现金和时间（现金成本），独自研究加密传真消耗个人精力（士气成本）。3. 结果：综合三个行动，计算属性变化。联系开源意识可能获得信息但消耗创新资源；危机会议提升士气但消耗现金；研究传真可能揭示真相但消耗士气。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "开源合作提案",
+          "desc": "基于开源意识组织的联系，提出具体的技术合作项目，共享部分研究成果换取外部支持",
+          "cost": 150,
+          "cost_desc": "现金成本（合作协议起草与初期投入）",
+          "predicted_effect": "可能提升创新（+5）和声望（+10），但需要现金投入"
+        },
+        {
+          "id": "2",
+          "label": "危机应对计划发布",
+          "desc": "将危机会议的讨论结果转化为具体的行动计划，向全员公布并分配任务",
+          "cost": 0,
+          "cost_desc": "士气成本（管理层精力消耗）",
+          "predicted_effect": "可能提升士气（+8），但若计划不完善可能进一步消耗士气"
+        },
+        {
+          "id": "3",
+          "label": "传真内容验证",
+          "desc": "将研究发现的加密传真线索与外部信息源交叉验证，确认其真实性与来源",
+          "cost": 0,
+          "cost_desc": "创新成本（技术验证资源）",
+          "predicted_effect": "可能揭示关键信息，提升创新（+3）或声望（+5），但需要技术资源"
+        },
+        {
+          "id": "4",
+          "label": "资源重整会议",
+          "desc": "针对多方探索导致的资源消耗，召开紧急财务与人力调整会议",
+          "cost": 50,
+          "cost_desc": "现金成本（会议组织与临时调整费用）",
+          "predicted_effect": "可能优化后续资源使用，小幅恢复士气（+3），但需要即时现金投入"
+        }
+      ],
+      "passive_rules": {
+        "income_base": "Innovation * 8 scaled by Reputation%",
+        "expense_base": 50,
+        "fatigue_decay": 3,
+        "market_forget": 1,
+        "knowledge_depreciation": 2
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + (Innovation * 8) * (Reputation / 100) (Passive_Income) + Action_Effect_Cash",
+        "morale_rule": "Morale_Next = Morale - 3 (Fatigue_Decay) + (Cash_Change / 100) * 2 (Financial_Impact) + Action_Effect_Morale",
+        "reputation_rule": "Reputation_Next = Reputation - 1 (Market_Forget) + (Innovation * 0.5) * (Morale / 100) (Breakthrough_Bonus) + Action_Effect_Reputation",
+        "innovation_rule": "Innovation_Next = Innovation - 2 (Knowledge_Depreciation) + (Morale / 10) * (Cash / 1000) (Resource_Boost) + Action_Effect_Innovation"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 1,
+      "company_name": "Nexus Corp",
+      "turn": 1,
+      "attributes": {
+        "cash": 1000,
+        "morale": 50,
+        "reputation": 50,
+        "innovation": 10
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766063346,
+          "type": "system",
+          "text": "在2035年的新深圳，你创立了'门墙科技'——一家专注于量子加密与意识接口的初创公司。全球科技巨头'天穹集团'正试图垄断意识上传市场，而地下黑客组织'破壁者'则致力于打破数字壁垒。你的公司夹在两者之间，既要应对天穹的商业打压和技术封锁，又要警惕破壁者的激进入侵。首轮融资后，你手握1000万启动资金，团队士气高昂但面临巨大压力。此时，天穹集团突然宣布推出'意识防火墙'测试版，直接威胁你的核心业务；同时，破壁者通过暗网联系你，暗示可以提供对抗天穹的后门技术，但代价未知。你必须在这多方博弈中，为'门墙科技'找到生存与发展之路。每半年一次的董事会会议即将召开，你的第一个决策将奠定公司未来基调。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "接受破壁者的合作邀请",
+          "desc": "秘密会见破壁者代表，获取对抗天穹集团的后门技术，但可能引发法律风险",
+          "cost": 200,
+          "cost_desc": "暗网交易与安全措施：200",
+          "predicted_effect": "Innovation +15, Reputation -10 (地下交易曝光风险), Morale +5 (团队兴奋)"
+        },
+        {
+          "id": "2",
+          "label": "公开谴责天穹集团垄断",
+          "desc": "召开新闻发布会，指控天穹集团不正当竞争，争取公众与监管支持",
+          "cost": 150,
+          "cost_desc": "公关活动与法律咨询：150",
+          "predicted_effect": "Reputation +20, Cash -100 (潜在诉讼费用), Morale +10 (正义感提升)"
+        },
+        {
+          "id": "3",
+          "label": "加速自有产品研发",
+          "desc": "集中资源开发'量子意识锁'原型，避开直接冲突，专注技术突破",
+          "cost": 300,
+          "cost_desc": "研发投入与设备升级：300",
+          "predicted_effect": "Innovation +25, Cash -150 (高额研发成本), Morale -5 (高压工作环境)"
+        },
+        {
+          "id": "4",
+          "label": "寻求政府科技基金支持",
+          "desc": "申请国家新兴技术扶持基金，获取资金与政策保护，但需接受监管",
+          "cost": 100,
+          "cost_desc": "申请材料与合规调整：100",
+          "predicted_effect": "Cash +200 (潜在拨款), Reputation +15, Innovation -5 (官僚流程拖慢研发)"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 120,
+        "expense_base": 50,
+        "morale_decay": 3,
+        "reputation_decay": 2,
+        "innovation_decay": 1
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Revenue) + Reputation * 3 (Brand_Value) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 3 (Burnout_Rate) + Cash_Change * 0.1 (Financial_Mood) + Action_Effect",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Market_Decay) + Innovation * 0.5 (Tech_Prestige) + Action_Effect",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Knowledge_Depreciation) + Morale * 0.2 (Team_Creativity) + Action_Effect"
+      }
+    },
+    {
+      "game_id": "default_room",
+      "round_id": 2,
+      "company_name": "Nexus Corp",
+      "turn": 2,
+      "attributes": {
+        "cash": 50,
+        "morale": 55,
+        "reputation": 53,
+        "innovation": 24
+      },
+      "players": [
+        {
+          "id": "player_human",
+          "name": "CEO (玩家)",
+          "type": "human",
+          "position": "ceo"
+        },
+        {
+          "id": "player_ai_tech",
+          "name": "CTO (AI)",
+          "type": "ai",
+          "position": "cto"
+        },
+        {
+          "id": "player_ai_market",
+          "name": "CMO (AI)",
+          "type": "ai",
+          "position": "cmo"
+        }
+      ],
+      "history": [
+        {
+          "id": 1766063346,
+          "type": "system",
+          "text": "在2035年的新深圳，你创立了'门墙科技'——一家专注于量子加密与意识接口的初创公司。全球科技巨头'天穹集团'正试图垄断意识上传市场，而地下黑客组织'破壁者'则致力于打破数字壁垒。你的公司夹在两者之间，既要应对天穹的商业打压和技术封锁，又要警惕破壁者的激进入侵。首轮融资后，你手握1000万启动资金，团队士气高昂但面临巨大压力。此时，天穹集团突然宣布推出'意识防火墙'测试版，直接威胁你的核心业务；同时，破壁者通过暗网联系你，暗示可以提供对抗天穹的后门技术，但代价未知。你必须在这多方博弈中，为'门墙科技'找到生存与发展之路。每半年一次的董事会会议即将召开，你的第一个决策将奠定公司未来基调。"
+        },
+        {
+          "id": 1766063376,
+          "type": "player",
+          "playerId": "player_human",
+          "playerPosition": "ceo",
+          "text": "决策: 执行选项: [接受破壁者的合作邀请, 加速自有产品研发, 寻求政府科技基金支持]"
+        },
+        {
+          "id": 1766063377,
+          "type": "system",
+          "text": "你咬牙签下破壁者的保密协议，500万现金瞬间划出。研发部灯火通明，新设备连夜进场，300万预算烧出原型机雏形。政府科技基金申请材料递上去的第七天，批复下来了——附带专项扶持。实验室里，破壁者的异构算法与你的架构开始融合，屏幕上的数据流突然加速突破阈值。",
+          "logicChain": "1. 玩家指令分析：玩家选择了三个决策选项：接受破壁者的合作邀请、加速自有产品研发、寻求政府科技基金支持。这些都属于具体的决策指令，符合游戏规则。2. 成本计算：接受破壁者合作需要支付500现金作为技术获取和风险成本；加速研发需要投入300现金用于设备和人力；寻求政府支持需要100现金用于申请和公关。总现金成本为900。3. 结果：现金大幅减少，但创新因研发和破壁者技术显著提升，士气因研发进展和政府支持而提高，声望因政府合作和破壁者关联而波动。"
+        },
+        {
+          "id": 1766063388536,
+          "type": "player",
+          "playerId": "player_ai_cto",
+          "playerPosition": "cto",
+          "text": "CTO决策: "
+        },
+        {
+          "id": 1766063388537,
+          "type": "system",
+          "text": "办公室里一片死寂。你盯着空白的决策板，手指悬在键盘上，却一个字也敲不出来。员工们面面相觑，等待指令的焦灼感在空气中蔓延。窗外的城市依旧运转，而你的公司像卡住的齿轮。半年时间在犹豫中流逝，没有方向，没有行动。士气开始悄然下滑，有人开始收拾工位上的私人物品。",
+          "logicChain": "1. 玩家指令分析：CTO指令为空，未提供任何决策指令。根据游戏规则，玩家必须通过文字指令经营公司，AI根据属性动态生成策略选项。空指令不符合决策要求。2. 成本计算：无指令，无成本可计算。3. 结果：指令无效，无法进行属性计算和事件生成。"
+        },
+        {
+          "id": 1766063402545,
+          "type": "player",
+          "playerId": "player_ai_cmo",
+          "playerPosition": "cmo",
+          "text": "CMO决策: "
+        },
+        {
+          "id": 1766063402546,
+          "type": "system",
+          "text": "公司会议室里，你盯着空白的白板一言不发。员工们面面相觑，士气在沉默中逐渐消沉。半年过去，没有明确指令，公司像失去舵手的船在市场中漂流。现金储备因日常开支持续消耗，市场对你的犹豫投来质疑目光，创新项目因缺乏方向而停滞。窗外竞争对手的广告牌格外刺眼——他们正在攻城略地。",
+          "logicChain": "1. 玩家指令分析：CMO指令为空字符串，属于无效指令。根据游戏规则，玩家必须提供明确的决策指令，不能是空指令或非决策类指令。2. 成本计算：无有效指令，无需计算成本。3. 结果：由于指令无效，本回合无决策行动，仅计算被动收益和支出。"
+        }
+      ],
+      "current_options": [
+        {
+          "id": "1",
+          "label": "将破壁者技术整合进现有产品线",
+          "desc": "利用从破壁者获得的技术，对现有产品进行升级改造，推出增强版本",
+          "cost": 200,
+          "cost_desc": "技术整合、生产线调整、员工培训费用",
+          "predicted_effect": "创新+8，现金-200，可能提升产品竞争力但需要技术消化时间"
+        },
+        {
+          "id": "2",
+          "label": "利用政府关系拓展海外市场",
+          "desc": "借助政府科技基金的合作关系，申请出口支持，开拓国际市场",
+          "cost": 150,
+          "cost_desc": "市场调研、国际认证、初期推广费用",
+          "predicted_effect": "声望+6，现金-150，可能带来长期收入但面临国际竞争"
+        },
+        {
+          "id": "3",
+          "label": "优化研发团队结构提升效率",
+          "desc": "基于加速研发的经验，重新调整研发部门分工和激励机制",
+          "cost": 50,
+          "cost_desc": "组织调整、绩效奖金、培训成本",
+          "predicted_effect": "士气+5，创新+3，现金-50，提升研发可持续性但可能短期影响进度"
+        },
+        {
+          "id": "4",
+          "label": "建立技术专利保护体系",
+          "desc": "为自主研发和合作获得的技术申请专利，构建知识产权护城河",
+          "cost": 100,
+          "cost_desc": "专利申请费、法律咨询、维护成本",
+          "predicted_effect": "创新+4，声望+3，现金-100，增强技术壁垒但需要持续投入"
+        }
+      ],
+      "passive_rules": {
+        "income_base": 120,
+        "expense_base": 50,
+        "morale_decay": 3,
+        "reputation_decay": 2,
+        "innovation_decay": 1
+      },
+      "formulas": {
+        "cash_rule": "Cash_Next = Cash - 50 (Base_Expense) + Innovation * 8 (Tech_Revenue) + Reputation * 3 (Brand_Value) + Action_Effect",
+        "morale_rule": "Morale_Next = Morale - 3 (Burnout_Rate) + Cash_Change * 0.1 (Financial_Mood) + Action_Effect",
+        "reputation_rule": "Reputation_Next = Reputation - 2 (Market_Decay) + Innovation * 0.5 (Tech_Prestige) + Action_Effect",
+        "innovation_rule": "Innovation_Next = Innovation - 1 (Knowledge_Depreciation) + Morale * 0.2 (Team_Creativity) + Action_Effect"
+      }
     }
   ]
 }

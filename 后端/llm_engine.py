@@ -193,40 +193,140 @@ class LLMEngine:
         return response
 
     @classmethod
-    async def analyze_logic_async(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
-        return await cls._run_in_executor(cls.analyze_logic, current_state, player_action_text, api_key, player_position)
-=======
-    "logic_chain": "1. ... 2. ...",
-    "narrative": "剧情内容...",
-    "event_summary": "一句话概括本回合发生的关键事件（用于侧边栏日志）...需包含本轮游戏的几个角色",
-    "attribute_changes": {{ "cash": -100, "morale": -5, "reputation": 0, "innovation": 10 }},
-    "next_options": [
-         {{ 
-           "id": "1", 
-           "label": "选项简述", 
-           "desc": "详细描述...", 
-           "cost": 500, 
-           "cost_desc": "研发投入: 500",
-           "predicted_effect": "..." 
-         }},
-         {{ "id": "2", "cost": 0, "cost_desc": "无成本", ... }},
-         {{ "id": "3", ... }},
-         {{ "id": "4", ... }}
-    ]
+    def stream_narrative_text(cls, current_state: dict, analyst_result: dict, player_action_text: str, api_key: str):
+        """
+        流式输出“纯剧情文本”，不返回 JSON，便于前端打字机效果直接显示剧情。
+        """
+        client = cls._get_client(api_key)
+
+        attributes = current_state.get("attributes", {})
+        hexagram = cls._get_hexagram()
+
+        prompt = f"""
+{GAME_MANUAL}
+
+【当前状态】
+- Attributes: {attributes}
+- I Ching: {hexagram}
+
+【逻辑演算结果 (不可更改，必须严格基于此生成剧情)】
+{json.dumps(analyst_result, ensure_ascii=False, indent=2)}
+
+【玩家指令】
+"{player_action_text}"
+
+【任务】
+只输出一段剧情文本（<200字，动作感强，不要啰嗦），不要输出 JSON、不要输出代码块、不要输出多余解释。
+"""
+
+        return client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是游戏主持人。只输出纯文本剧情，不要输出 JSON/Markdown/代码块。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            stream=True,
+        )
+
+    @classmethod
+    def generate_next_options(cls, current_state: dict, analyst_result: dict, player_action_text: str, api_key: str):
+        """
+        生成 4 个后续决策选项（JSON），用于在流式剧情结束后一次性返回给前端。
+        """
+        attributes = current_state.get("attributes", {})
+        hexagram = cls._get_hexagram()
+
+        prompt = f"""
+{GAME_MANUAL}
+
+【当前状态】
+- Attributes: {attributes}
+- I Ching: {hexagram}
+
+【逻辑演算结果 (不可更改，必须严格基于此生成选项)】
+{json.dumps(analyst_result, ensure_ascii=False, indent=2)}
+
+【玩家指令】
+"{player_action_text}"
+
+【任务】
+生成 4 个后续“决策行动”选项，每个包含成本与预期效果。
+
+【返回格式 (JSON only)】
+{{
+  "next_options": [
+    {{ "id": "1", "label": "...", "desc": "...", "cost": 100, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "2", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "3", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "4", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }}
+  ]
 }}
 """
-        response_data = cls._call_llm(prompt, api_key)
-        
-        if "system_note" not in response_data and "logic_chain" in response_data:
-            response_data["system_note"] = response_data["logic_chain"]
-            
-        return response_data
+        data = cls._call_llm(prompt, api_key, max_tokens=600)
+        return data.get("next_options", []) or []
+
+    @classmethod
+    async def analyze_logic_async(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
+        return await cls._run_in_executor(cls.analyze_logic, current_state, player_action_text, api_key, player_position)
+
+    @classmethod
+    def process_turn(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
+        """
+        非流式：一次性返回 narrative + next_options + attribute_changes 等字段，供普通 JSON 接口使用。
+        """
+        analyst = cls.analyze_logic(current_state, player_action_text, api_key, player_position)
+
+        attributes = current_state.get("attributes", {})
+        hexagram = cls._get_hexagram()
+
+        # 用一次 JSON 调用生成剧情+选项（不走 stream），保证前端直接 json() 可用
+        prompt = f"""
+{GAME_MANUAL}
+
+【当前状态】
+- Turn: {current_state.get('turn', 1)}
+- Attributes: {attributes}
+- I Ching: {hexagram}
+
+【逻辑演算结果 (不可更改)】
+{json.dumps(analyst, ensure_ascii=False, indent=2)}
+
+【玩家指令】
+{player_position.upper()}: "{player_action_text}"
+
+【任务】
+基于逻辑演算结果，生成剧情与下一回合 4 个选项。
+
+【返回格式 (JSON only)】
+{{
+  "logic_chain": "...",
+  "event_summary": "...",
+  "attribute_changes": {{ }},
+  "narrative": "...",
+  "next_options": [
+    {{ "id": "1", "label": "...", "desc": "...", "cost": 100, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "2", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "3", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }},
+    {{ "id": "4", "label": "...", "desc": "...", "cost": 0, "cost_desc": "...", "predicted_effect": "..." }}
+  ]
+}}
+"""
+        narrator = cls._call_llm(prompt, api_key, max_tokens=900)
+
+        # 以 analyst 为准，避免剧情 agent 胡乱改数
+        result = {
+            "logic_chain": analyst.get("logic_chain", ""),
+            "event_summary": analyst.get("event_summary", ""),
+            "attribute_changes": analyst.get("attribute_changes", {}) or {},
+            "narrative": narrator.get("narrative", "") if isinstance(narrator, dict) else "",
+            "next_options": narrator.get("next_options", []) if isinstance(narrator, dict) else [],
+        }
+        return result
 
     @classmethod
     async def process_turn_async(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
-        """Async version of process_turn"""
         return await cls._run_in_executor(cls.process_turn, current_state, player_action_text, api_key, player_position)
->>>>>>> origin/main
 
     
     @classmethod
@@ -290,11 +390,7 @@ class LLMEngine:
 
 
     @classmethod
-<<<<<<< HEAD
     def _call_llm(cls, prompt, api_key, max_tokens=None):
-=======
-    def _call_llm(cls, prompt, api_key):
->>>>>>> origin/main
         try:
             client = cls._get_client(api_key)
             print(f"DEBUG: Calling LLM at {client.base_url} with model deepseek-chat...")
