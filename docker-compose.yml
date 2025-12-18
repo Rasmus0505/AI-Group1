@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # === MongoDB 数据库服务 ===
+  mongo:
+    image: mongo:latest
+    container_name: game-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      TZ: Asia/Shanghai
+    volumes:
+      - ./mongo_data:/data/db
+    networks:
+      - game-network
+
+  # === Python 后端服务 (FastAPI) ===
+  game-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: game-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - STORAGE_MODE=CLOUD
+      - TZ=Asia/Shanghai
+    depends_on:
+      - mongo
+    networks:
+      - game-network
+
+  # === 前端服务 (React + Nginx) ===
+  game-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: game-frontend
+    restart: always
+    ports:
+      - "80:80" # 前端通过 80 端口访问
+    depends_on:
+      - game-backend
+    networks:
+      - game-network
+
+networks:
+  game-network:
+    driver: bridge
