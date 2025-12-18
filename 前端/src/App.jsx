@@ -4,7 +4,7 @@ import TeamList from './components/TeamList/TeamList';
 import Terminal from './components/Terminal/Terminal';
 import InputArea from './components/InputArea/InputArea';
 import EventLog from './components/EventLog/EventLog';
-import { initGame, sendAction, configureApi } from './engine/api';
+import { initGame, sendAction, sendActionStream, configureApi } from './engine/api';
 // Re-import local engine for Demo Mode
 import { initialState, processDecision } from './engine/gameLogic';
 import { mockAI } from './engine/mockAI';
@@ -558,7 +558,7 @@ function App() {
           ...prev,
           history: [
             ...prev.history,
-            { id: Date.now(), type: 'system', text: `📡 指令已发送: [${customText || "选择选项"}]，Nexus AI 正在推演因果链... (请等待约 5-10 秒)` }
+            { id: Date.now(), type: 'system', text: `📡 指令已发送: [${customText || "选择选项"}]...` }
           ]
         }));
 
@@ -574,22 +574,63 @@ function App() {
           playerPosition: playerPosition
         };
 
-        const data = await sendAction(action);
-        setGameState(data.state);
-        setCurrentOptions(data.options);
-        if (data.deltas) {
-          setDeltas(data.deltas);
-        }
-        if (data.event_summary) {
-          setEvents(prev => [...prev, data.event_summary]);
-        }
+        // Streaming Handler (V4.0)
+        let streamingNarrative = "";
+        let streamingId = Date.now() + 100;
+
+        await sendActionStream(action, (chunk) => {
+          // Handle Stream Events from Backend
+          if (chunk.type === 'log') {
+            // System Log (Analyst Status)
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id: Date.now(), type: 'system', text: `[SYSTEM] ${chunk.content}`, isLog: true }]
+            }));
+          }
+          else if (chunk.type === 'delta') {
+            // Instant Attribute Update (Red/Green Flash)
+            setDeltas(chunk.data);
+          }
+          else if (chunk.type === 'thought') {
+            // Logic Process text (for Terminal)
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id: Date.now(), type: 'system', text: "🧠 逻辑推演完成", logicChain: chunk.content }]
+            }));
+          }
+          else if (chunk.type === 'token') {
+            // Narrative Streaming (Typewriter effect)
+            streamingNarrative += chunk.content;
+
+            // Update the last "streaming" message or add new one
+            setGameState(prev => {
+              const history = [...prev.history];
+              const last = history[history.length - 1];
+              if (last && last.isStreaming) {
+                last.text = streamingNarrative;
+                return { ...prev, history };
+              } else {
+                return { ...prev, history: [...history, { id: streamingId, type: 'system', text: streamingNarrative, isStreaming: true }] };
+              }
+            });
+          }
+          else if (chunk.type === 'done') {
+            // Finalize Turn
+            setGameState(chunk.state);
+            setCurrentOptions(prevOpts => chunk.state.current_options || []); // Correctly set new options
+            if (chunk.event_summary) {
+              setEvents(prev => [...prev, chunk.event_summary]);
+            }
+          }
+        });
+
       } catch (err) {
         console.error("API Error:", err);
         setGameState(prev => ({
           ...prev,
           history: [
             ...prev.history,
-            { id: Date.now(), type: 'system', text: `❌ 指令发送失败: ${err.message}. 请检查连接。` }
+            { id: Date.now(), type: 'system', text: `❌ 连接中断: ${err.message}.` }
           ]
         }));
       } finally {

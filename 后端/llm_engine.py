@@ -92,22 +92,23 @@ class LLMEngine:
         return cls._call_llm(prompt, api_key)
 
     @classmethod
-    def process_turn(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
+    def analyze_logic(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
+        """
+        Phase 1: The Analyst (Logic Agent)
+        - Fast, deterministic math & validity check.
+        - Returns: Cost, Validity, Attribute Deltas, and Logic Chain keypoints.
+        """
         full_history = current_state.get('history', [])
-        # Last 30 entries for context
         recent_history_entries = full_history[-30:] 
         history_text = "\n".join([f"[{h['type'].upper()}] {h.get('playerPosition', 'CEO')}: {h['text']}" for h in recent_history_entries])
         
         attributes = current_state.get('attributes', {})
         formulas = current_state.get('formulas', "Standard Logic")
-        hexagram = cls._get_hexagram()
         
-        # 玩家角色信息
+        # Player Info
         player_role = "CEO"
-        if player_position == "cto":
-            player_role = "CTO"
-        elif player_position == "cmo":
-            player_role = "CMO"
+        if player_position == "cto": player_role = "CTO"
+        elif player_position == "cmo": player_role = "CMO"
         
         prompt = f"""
 {GAME_MANUAL}
@@ -117,24 +118,84 @@ class LLMEngine:
 - Turn: {current_state.get('turn', 1)}
 - Attributes: {attributes}
 - Formulas: {formulas}
-- I Ching: {hexagram}
 
-【完整历史记录 (以此为唯一事实依据)】
+【历史片段】
 {history_text}
 
 【玩家指令】
 {player_role}: "{player_action_text}"
 
-【思维链要求 (Step-by-Step Logic)】
-在生成 JSON 之前，你必须先在内心（或 system_note 字段）进行严密逻辑推演：
-1. **回顾历史**：玩家上回合做了什么？对现在有什么伏笔？
-2. **合规检查**：指令是否属于“效果/预期类”违规指令？
-3. **数学计算**：根据公式 `{formulas}`，列出算式。
-   Example: Cash = 1000 (Old) + 100 (Passive) - 200 (Action Cost) = 900.
-4. **生成结果**：结合卦象和算式结果，生成剧情。
+【任务: 逻辑演算 (The Analyst)】
+你是一个纯粹的逻辑计算引擎。请执行以下步骤：
+1. **合规检查**：指令是否有效？
+2. **数学计算**：根据公式和指令，计算属性变化。
+3. **成本推断**：如果玩家下达了自定义指令（如“举办派对”），必须根据常识推断并扣除成本。
 
 【返回格式 (JSON only)】
 {{
+    "valid": true,
+    "logic_chain": "1. 玩家指令分析... 2. 成本计算... 3. 结果...",
+    "attribute_changes": {{ "cash": -500, "morale": +5, ... }},
+    "event_summary": "一句话概括核心事件 (<10字)"
+}}
+"""
+        # Fast call with lower max_tokens
+        return cls._call_llm(prompt, api_key, max_tokens=300)
+
+    @classmethod
+    def stream_narrative(cls, current_state: dict, analyst_result: dict, player_action_text: str, api_key: str):
+        """
+        Phase 2: The Narrator (Creative Agent)
+        - Streams narrative based on Analyst's math.
+        """
+        client = cls._get_client(api_key)
+        
+        attributes = current_state.get('attributes', {})
+        hexagram = cls._get_hexagram()
+        
+        prompt = f"""
+{GAME_MANUAL}
+
+【当前状态】
+- Attributes: {attributes}
+- I Ching: {hexagram}
+
+【逻辑演算结果 (不可更改，必须严格基于此生成剧情)】
+{json.dumps(analyst_result, ensure_ascii=False, indent=2)}
+
+【玩家指令】
+"{player_action_text}"
+
+【任务: 剧情生成 (The Narrator)】
+1. 基于上述逻辑结果和卦象，创作一段引人入胜的剧情。
+2. **剧情简述**: <200字，动作感强，不要啰嗦。
+3. **生成选项**: 4个后续决策选项 (含成本)。
+
+【返回格式 (JSON only)】
+{{
+    "narrative": "...",
+    "next_options": [
+         {{ "id": "1", "label": "...", "desc": "...", "cost": 100, "cost_desc": "...", "predicted_effect": "..." }},
+         ...
+    ]
+}}
+"""
+        # Streaming Call
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "You are a Game Master Narrator. Output JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            stream=True # ENABLE STREAMING
+        )
+        return response
+
+    @classmethod
+    async def analyze_logic_async(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
+        return await cls._run_in_executor(cls.analyze_logic, current_state, player_action_text, api_key, player_position)
+=======
     "logic_chain": "1. ... 2. ...",
     "narrative": "剧情内容...",
     "event_summary": "一句话概括本回合发生的关键事件（用于侧边栏日志）...需包含本轮游戏的几个角色",
@@ -165,6 +226,7 @@ class LLMEngine:
     async def process_turn_async(cls, current_state: dict, player_action_text: str, api_key: str, player_position: str = "ceo"):
         """Async version of process_turn"""
         return await cls._run_in_executor(cls.process_turn, current_state, player_action_text, api_key, player_position)
+>>>>>>> origin/main
 
     
     @classmethod
@@ -228,7 +290,11 @@ class LLMEngine:
 
 
     @classmethod
+<<<<<<< HEAD
+    def _call_llm(cls, prompt, api_key, max_tokens=None):
+=======
     def _call_llm(cls, prompt, api_key):
+>>>>>>> origin/main
         try:
             client = cls._get_client(api_key)
             print(f"DEBUG: Calling LLM at {client.base_url} with model deepseek-chat...")
@@ -239,6 +305,7 @@ class LLMEngine:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content)
