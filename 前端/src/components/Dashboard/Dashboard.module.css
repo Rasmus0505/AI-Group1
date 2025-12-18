@@ -1,55 +1,115 @@
 .dashboard {
-    background: var(--color-glass);
-    border: 1px solid var(--color-glass-border);
-    border-radius: 12px;
-    padding: 1.5rem;
-    backdrop-filter: blur(10px);
+    background: transparent;
+    /* Remove background to make it seamless or just minimal */
+    border-bottom: 1px solid var(--color-glass-border);
+    /* Divider instead of box */
+    padding: 0.5rem 1rem;
+    /* Reduced padding */
     margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    /* Layout: Attributes on left, Team on right? Or just grid */
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+/* If we want to keep it strictly as the user image (just list), we structure it vertically or grid */
+.dashboard {
+    /* Resetting for the specific "Data Alignment Core" style request */
+    background: #000;
+    /* Dark background like image */
+    border: 1px solid var(--color-glass-border);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    /* Reduced margin */
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 .title {
-    font-size: 0.9rem;
+    font-size: 0.65rem;
+    /* Smaller title */
+    color: var(--color-accent);
     text-transform: uppercase;
-    letter-spacing: 2px;
-    color: var(--color-muted);
-    margin-bottom: 1rem;
+    letter-spacing: 1px;
+    margin-bottom: 0.2rem;
+    border-bottom: 1px solid var(--color-accent);
+    padding-bottom: 0px;
+    display: inline-block;
 }
 
 .grid {
     display: grid;
-    gap: 0.8rem;
+    grid-template-columns: 1fr;
+    gap: 0px;
+    /* Minimal gap */
+    width: 100%;
 }
 
 .statRow {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 0px;
+    height: 1.2rem;
+    /* Fixed small height */
 }
 
 .label {
-    width: 120px;
-    font-size: 0.85rem;
-    color: var(--color-text);
+    font-size: 0.65rem;
+    /* Smaller label */
+    color: #e0e0e0;
+    font-family: var(--font-main);
 }
 
-.barContainer {
-    flex: 1;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.barFill {
-    height: 100%;
-    transition: width 0.5s ease-out;
-    box-shadow: 0 0 10px currentColor;
-    /* Neon glow */
+.valueContainer {
+    display: flex;
+    align-items: center;
+    gap: 3px;
 }
 
 .value {
-    width: 40px;
-    text-align: right;
+    font-size: 0.8rem;
+    /* Smaller value */
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    color: #fff;
+    font-weight: bold;
 }
+
+/* Hide Players for now or make them very small/compact to match "shrink" req? 
+   User said "把显示这四个指标的窗口缩小一点", implies focus on attributes.
+   I will keep players but make them compact or side-by-side. 
+*/
+.playersGrid {
+    display: none;
+    /* User didn't explicitly ask to remove players but the image only shows stats. 
+                      Safest is to keep them but compact. Let's start with hiding to match "shrink" 
+                      and if they want them back, we add them small. 
+                      Actually, "Team Members" are important. I'll put them in a separate small row or header.
+                   */
+}
+
+/* Let's try a 2-column layout for the whole dashboard: Stats | Team */
+.container {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+.statsSection {
+    flex: 1;
+}
+
+.teamSection {
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Re-defining .dashboard to support the split if needed, 
+   but for now let's just make the stats list very compact as requested.
+*/

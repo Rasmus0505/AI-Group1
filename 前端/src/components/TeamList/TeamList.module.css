@@ -1,0 +1,41 @@
+.container {
+    padding: 0.2rem 0.5rem;
+    /* Reduced padding */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 0.2rem;
+}
+
+.title {
+    font-size: 0.65rem;
+    color: #4db8ff;
+    margin-bottom: 0.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 0;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+}
+
+.playerRow {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0px;
+    opacity: 0.9;
+    font-size: 0.7rem;
+    /* Smaller font */
+    height: 1.1rem;
+}
+
+.playerName {
+    font-weight: bold;
+}
+
+.playerPosition {
+    font-size: 0.7rem;
+    color: #666;
+}

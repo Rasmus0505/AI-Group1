@@ -41,15 +41,11 @@ export async function initGame(settings = "") {
  */
 export async function sendAction(action, systemPrompts = []) {
     try {
-        const payload = {
-            action,
-            systemPrompts: systemPrompts.length > 0 ? systemPrompts : undefined
-        };
-
         const response = await fetch(`${API_BASE}/api/action`, {
             method: "POST",
             headers: getHeaders(),
-            body: JSON.stringify(payload)
+            // Backend expects PlayerAction fields directly in body
+            body: JSON.stringify(action)
         });
         if (!response.ok) throw new Error("Failed to send action");
         return await response.json();
@@ -59,3 +55,56 @@ export async function sendAction(action, systemPrompts = []) {
     }
 }
 
+
+/**
+ * Send player action to backend and Stream response (V4.0)
+ * Uses Server-Sent Events (SSE) format over a POST stream.
+ * @param {Object} action - Player Action
+ * @param {Function} onChunk - Callback for each JSON chunk received
+ * @returns {Promise<void>}
+ */
+export async function sendActionStream(action, onChunk) {
+    try {
+        const response = await fetch(`${API_BASE}/api/action`, {
+            method: "POST",
+            headers: {
+                ...getHeaders(),
+                "Accept": "text/event-stream"
+            },
+            body: JSON.stringify(action)
+        });
+
+        if (!response.ok) throw new Error("Failed to connect to Nexus-Stream");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            // Process SSE "data: {...}\n\n"
+            const lines = buffer.split("\n\n");
+            buffer = lines.pop(); // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                    const jsonStr = line.slice(6);
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        onChunk(data);
+                    } catch (e) {
+                        console.warn("Stream JSON parse error:", e);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Stream API Error:", error);
+        throw error;
+    }
+}

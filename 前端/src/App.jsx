@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard/Dashboard';
+import TeamList from './components/TeamList/TeamList';
 import Terminal from './components/Terminal/Terminal';
 import InputArea from './components/InputArea/InputArea';
 import { EventMonitor } from './components/EventMonitor/EventMonitor';
@@ -493,6 +494,9 @@ function App() {
   const [gameState, setGameState] = useState(defaultState);
   const [currentOptions, setCurrentOptions] = useState([]);
   const [showHelp, setShowHelp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [deltas, setDeltas] = useState({});
+  const [events, setEvents] = useState([]);
 
   // Handle mode selection from Landing Page
   const startGame = (mode, config) => {
@@ -517,6 +521,7 @@ function App() {
           const data = await initGame(initSettings);
           setGameState(data.state);
           setCurrentOptions(data.options);
+          setDeltas({}); // Reset deltas on init
         } catch (err) {
           console.error("Failed to init API game:", err);
           // Fallback narrative with retry hint
@@ -534,6 +539,7 @@ function App() {
         setGameState(initialState);
         const options = mockAI.generateOptions(initialState);
         setCurrentOptions(options);
+        setDeltas({});
       }
     };
 
@@ -541,12 +547,25 @@ function App() {
   }, [view, gameMode, initSettings]);
 
   const handleExecute = async (selectedOptionIds, customText, playerId = 'player_human', playerPosition = 'ceo') => {
+    // 防止重复提交
+    if (isLoading) return;
+    setIsLoading(true);
+
     // 处理多选选项和自定义输入
     if (gameMode === 'official') {
       try {
+        // 立即显示“思考中”状态
+        setGameState(prev => ({
+          ...prev,
+          history: [
+            ...prev.history,
+            { id: Date.now(), type: 'system', text: `📡 指令已发送: [${customText || "选择选项"}]...` }
+          ]
+        }));
+
         // 收集选中的选项
         const selectedOptions = currentOptions.filter(opt => selectedOptionIds.includes(opt.id));
-        
+
         // 构建决策对象
         const action = {
           label: selectedOptions.length > 0 ? selectedOptions.map(opt => opt.label).join(', ') : "Custom Directive",
@@ -555,50 +574,116 @@ function App() {
           playerId: playerId,
           playerPosition: playerPosition
         };
-        
-        const data = await sendAction(action);
-        setGameState(data.state);
-        setCurrentOptions(data.options);
-        
-        // 如果是人类玩家（CEO）的决策，自动触发AI玩家的决策流程
-        if (playerPosition === 'ceo') {
-          console.log('触发AI玩家决策流程...');
-          // AI决策将由后端自动处理
-        }
+
+        // Streaming Handler (V4.0)
+        let streamingNarrative = "";
+        let streamingId = Date.now() + 100;
+
+        await sendActionStream(action, (chunk) => {
+          // Handle Stream Events from Backend
+          if (chunk.type === 'log') {
+            // System Log (Analyst Status)
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id: Date.now(), type: 'system', text: `[SYSTEM] ${chunk.content}`, isLog: true }]
+            }));
+          }
+          else if (chunk.type === 'delta') {
+            // Instant Attribute Update (Red/Green Flash)
+            setDeltas(chunk.data);
+          }
+          else if (chunk.type === 'thought') {
+            // Logic Process text (for Terminal)
+            setGameState(prev => ({
+              ...prev,
+              history: [...prev.history, { id: Date.now(), type: 'system', text: "🧠 逻辑推演完成", logicChain: chunk.content }]
+            }));
+          }
+          else if (chunk.type === 'token') {
+            // Narrative Streaming (Typewriter effect)
+            streamingNarrative += chunk.content;
+
+            // Update the last "streaming" message or add new one
+            setGameState(prev => {
+              const history = [...prev.history];
+              const last = history[history.length - 1];
+              if (last && last.isStreaming) {
+                last.text = streamingNarrative;
+                return { ...prev, history };
+              } else {
+                return { ...prev, history: [...history, { id: streamingId, type: 'system', text: streamingNarrative, isStreaming: true }] };
+              }
+            });
+          }
+          else if (chunk.type === 'done') {
+            // Finalize Turn
+            setGameState(chunk.state);
+            setCurrentOptions(prevOpts => chunk.state.current_options || []); // Correctly set new options
+            if (chunk.event_summary) {
+              setEvents(prev => [...prev, chunk.event_summary]);
+            }
+          }
+        });
+
       } catch (err) {
         console.error("API Error:", err);
+        setGameState(prev => ({
+          ...prev,
+          history: [
+            ...prev.history,
+            { id: Date.now(), type: 'system', text: `❌ 连接中断: ${err.message}.` }
+          ]
+        }));
+      } finally {
+        setIsLoading(false);
       }
     } else {
       // Demo Mode
-      // 处理选中的选项
-      const selectedOptions = currentOptions.filter(opt => selectedOptionIds.includes(opt.id));
-      
-      // 先处理所有选中的选项
-      let nextState = { ...gameState };
-      
-      // 依次处理每个选中的选项
-      for (const opt of selectedOptions) {
-        nextState = processDecision(nextState, opt);
+      try {
+        // Capture state before decision for simplistic delta calc in Demo Mode
+        const stateBefore = { ...gameState.attributes };
+
+        // 处理选中的选项
+        const selectedOptions = currentOptions.filter(opt => selectedOptionIds.includes(opt.id));
+
+        // 先处理所有选中的选项
+        let nextState = { ...gameState };
+
+        // 依次处理每个选中的选项
+        for (const opt of selectedOptions) {
+          nextState = processDecision(nextState, opt);
+        }
+
+        // 处理自定义输入
+        if (customText.trim()) {
+          const analysis = mockAI.analyzeInput(customText, nextState);
+          const customDecision = {
+            label: "Custom Directive",
+            customText: customText,
+            effects: analysis.effects,
+            resultNarrative: analysis.resultNarrative,
+            playerId: playerId,
+            playerPosition: playerPosition
+          };
+          nextState = processDecision(nextState, customDecision);
+        }
+
+        // Calculate Deltas for Demo Mode
+        const stateAfter = nextState.attributes;
+        const newDeltas = {};
+        for (let key in stateAfter) {
+          const diff = stateAfter[key] - (stateBefore[key] || 0);
+          if (diff !== 0) newDeltas[key] = diff;
+        }
+        setDeltas(newDeltas);
+
+        // 生成新选项
+        const newOptions = mockAI.generateOptions(nextState);
+        setGameState(nextState);
+        setCurrentOptions(newOptions);
+      } finally {
+        setIsLoading(false);
       }
-      
-      // 处理自定义输入
-      if (customText.trim()) {
-        const analysis = mockAI.analyzeInput(customText, nextState);
-        const customDecision = {
-          label: "Custom Directive",
-          customText: customText,
-          effects: analysis.effects,
-          resultNarrative: analysis.resultNarrative,
-          playerId: playerId,
-          playerPosition: playerPosition
-        };
-        nextState = processDecision(nextState, customDecision);
-      }
-      
-      // 生成新选项
-      const newOptions = mockAI.generateOptions(nextState);
-      setGameState(nextState);
-      setCurrentOptions(newOptions);
     }
   };
 
@@ -614,58 +699,70 @@ function App() {
 
   // Render Game Interface
   return (
-    <div className="app-container">
+    <div className="app-container" style={{
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundImage: 'radial-gradient(circle at 50% 10%, #1a1a3a 0%, #0a0a16 70%)',
+      overflow: 'hidden' /* Prevent body scroll */
+    }}>
       {/* Help Modal */}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
 
-      <header style={{ marginBottom: '1rem', textAlign: 'center', position: 'relative' }}>
+      {/* Header - Minimal Height */}
+      <header style={{
+        padding: '0.5rem 1rem',
+        textAlign: 'center',
+        position: 'relative',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        flexShrink: 0
+      }}>
         {/* Back Button */}
         <button
           onClick={() => setView('home')}
           style={{
             position: 'absolute',
-            top: '0',
-            left: '0',
+            top: '50%',
+            left: '1rem',
+            transform: 'translateY(-50%)',
             background: 'transparent',
             border: 'none',
             color: 'var(--color-muted)',
-            padding: '5px 10px',
             cursor: 'pointer',
             fontSize: '0.8rem',
             display: 'flex',
             alignItems: 'center',
             gap: '5px',
-            transition: 'color 0.3s'
           }}
-          onMouseOver={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
-          onMouseOut={(e) => e.currentTarget.style.color = 'var(--color-muted)'}
         >
-          ← 返回首页
+          ← 首页
         </button>
 
         <h1 style={{
-          fontSize: '1.5rem',
+          fontSize: '1.2rem',
           letterSpacing: '4px',
           color: 'var(--color-text)',
+          margin: 0,
           textShadow: '0 0 10px rgba(0, 240, 255, 0.5)'
         }}>
           EVERY WALL IS A DOOR
         </h1>
-        <p style={{ color: 'var(--color-muted)', fontSize: '0.8rem' }}>
-          CEO: 玩家 | Turn: {gameState.turn} | Mode: <span style={{ color: gameMode === 'official' ? '#0f0' : '#0ff' }}>{gameMode === 'official' ? '🚀 Official (API)' : '🧪 Demo (Local)'}</span>
-        </p>
+        <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '5px' }}>
+          CEO: 玩家 | Turn: {gameState.turn} | Mode: <span style={{ color: gameMode === 'official' ? '#0f0' : '#0ff' }}>{gameMode === 'official' ? 'Official' : 'Demo'}</span>
+        </div>
 
         {/* Help Button */}
         <button
           onClick={() => setShowHelp(true)}
           style={{
             position: 'absolute',
-            top: '0',
-            right: '0',
+            top: '50%',
+            right: '1rem',
+            transform: 'translateY(-50%)',
             background: 'transparent',
-            border: '1px solid var(--color-glass)',
+            border: '1px solid var(--color-glass-border)',
             color: 'var(--color-accent)',
-            padding: '5px 10px',
+            padding: '2px 8px',
             borderRadius: '4px',
             cursor: 'pointer',
             fontSize: '0.8rem'
