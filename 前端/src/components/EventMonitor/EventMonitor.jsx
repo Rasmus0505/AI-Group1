@@ -24,9 +24,9 @@ export function EventMonitor() {
         }
 
         updateDisplay()
-        // 如果需要实时更新，可以设置定时器
-        // const timer = setInterval(updateDisplay, 1000)
-        // return () => clearInterval(timer)
+        // 设置定时器以实时更新事件进度
+        const timer = setInterval(updateDisplay, 500)
+        return () => clearInterval(timer)
     }, [])
 
     if (eventSummary.activeCount === 0) {
@@ -123,6 +123,14 @@ function generateProgressSteps(current, total) {
  */
 export function AdvancedEventPanel() {
     const [activeTab, setActiveTab] = useState('active')
+    const [, setRefresh] = useState(0)
+    
+    // 定时刷新以获取最新事件状态
+    useEffect(() => {
+        const timer = setInterval(() => setRefresh(prev => prev + 1), 500)
+        return () => clearInterval(timer)
+    }, [])
+
     const activeEvents = eventManager.getActiveEvents()
     const completedEvents = eventManager.getCompletedEvents()
 

@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard/Dashboard';
 import Terminal from './components/Terminal/Terminal';
 import InputArea from './components/InputArea/InputArea';
+import { EventMonitor } from './components/EventMonitor/EventMonitor';
 import { initGame, sendAction, configureApi } from './engine/api';
 // Re-import local engine for Demo Mode
-import { initialState, processDecision } from './engine/gameLogic';
+import { initialState, processDecision, initializeDemoEvents } from './engine/gameLogic';
 import { mockAI } from './engine/mockAI';
 import { helpContent } from './engine/helpContent';
 import './index.css';
@@ -529,6 +530,7 @@ function App() {
         }
       } else {
         // --- Demo Mode (Local) ---
+        initializeDemoEvents(); // 初始化演示事件
         setGameState(initialState);
         const options = mockAI.generateOptions(initialState);
         setCurrentOptions(options);
@@ -674,6 +676,7 @@ function App() {
       </header>
 
       <Dashboard attributes={gameState.attributes} players={gameState.players} />
+      <EventMonitor />
       <Terminal history={gameState.history} />
       <InputArea
         options={currentOptions}

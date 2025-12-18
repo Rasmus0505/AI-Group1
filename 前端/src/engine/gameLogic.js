@@ -1,5 +1,35 @@
 import { eventManager, generateProgressOutput } from './eventSystem.js';
 
+/**
+ * 初始化演示事件 - 用于测试事件系统
+ */
+export function initializeDemoEvents() {
+    // 清空之前的事件
+    eventManager.reset();
+    
+    // 添加几个演示事件
+    eventManager.createAndAddEvent(
+        'event_quantum_research',
+        '量子计算研究项目',
+        5,
+        '项目取得重大突破，可能成为公司的救命稻草。'
+    );
+    
+    eventManager.createAndAddEvent(
+        'event_fundraising',
+        '融资谈判',
+        3,
+        '成功获得融资，公司资金链得到缓解。'
+    );
+    
+    eventManager.createAndAddEvent(
+        'event_team_building',
+        '团队重组培训',
+        4,
+        '团队士气提升，研发效率提高。'
+    );
+}
+
 export const initialState = {
     companyName: "Nexus Corp",
     turn: 1,
