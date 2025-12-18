@@ -1,0 +1,43 @@
+# Docker 部署忽略文件
+# 避免将不必要的文件打包进镜像
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# 前端文件（不需要打包进后端镜像）
+前端/
+node_modules/
+package.json
+package-lock.json
+
+# 数据文件
+mongo_data/
+后端/local_game_data.json
+
+# 文档
+README.md
+github小组开发库说明书/
+已完成的工作/
+
+# 其他
+.DS_Store
+*.log
