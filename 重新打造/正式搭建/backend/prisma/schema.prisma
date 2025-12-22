@@ -80,6 +80,14 @@ model HostConfig {
   roomId                String   @unique
   createdBy             String
   apiConfig             Json
+  apiProvider           String?
+  apiEndpoint           String?
+  apiHeaders            Json?
+  apiBodyTemplate       Json?
+  validationStatus      String   @default("pending")
+  validationMessage     String?
+  validatedAt           DateTime?
+  configurationCompletedAt DateTime?
   gameRules             String?
   totalDecisionEntities Int
   humanPlayerCount      Int

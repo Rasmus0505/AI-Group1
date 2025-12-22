@@ -8,6 +8,7 @@ import { Server } from 'socket.io';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { rateLimiter } from './middleware/rateLimiter';
+import { initSocketServer } from './socket';
 
 // Load environment variables
 dotenv.config();
@@ -59,14 +60,8 @@ app.use('/api/rooms', roomRoutes);
 // Error handling
 app.use(errorHandler);
 
-// WebSocket connection handling
-io.on('connection', (socket) => {
-  logger.info(`WebSocket client connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    logger.info(`WebSocket client disconnected: ${socket.id}`);
-  });
-});
+// WebSocket connection handling (delegated to socket module)
+initSocketServer(io);
 
 // Start server
 httpServer.listen(PORT, () => {
@@ -75,4 +70,3 @@ httpServer.listen(PORT, () => {
 });
 
 export { app, io };
-

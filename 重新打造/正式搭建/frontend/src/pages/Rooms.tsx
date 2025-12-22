@@ -5,6 +5,8 @@ import { roomAPI, RoomSummary } from '../services/rooms';
 import { wsService } from '../services/websocket';
 import { useAuthStore } from '../stores/authStore';
 import RoomCard from '../components/RoomCard';
+import { useSocket } from '../hooks/useSocket';
+import { useMessageRouter } from '../hooks/useMessageRouter';
 
 function Rooms() {
   const { token } = useAuthStore();
@@ -14,6 +16,8 @@ function Rooms() {
   const [createLoading, setCreateLoading] = useState(false);
   const [actionRoomId, setActionRoomId] = useState<string | null>(null);
   const [form] = Form.useForm();
+  const socketStatus = useSocket();
+  useMessageRouter();
 
   const getErrMsg = (error: unknown, fallback: string) => {
     if (typeof error === 'object' && error && 'response' in error) {
@@ -45,15 +49,42 @@ function Rooms() {
 
   useEffect(() => {
     if (!token) return;
-    wsService.connect(token);
+
     const refresh = () => loadRooms();
+
+    const handleSystemMessage = (payload: unknown) => {
+      refresh();
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        'message' in payload &&
+        (payload as { message?: string }).message
+      ) {
+        message.info((payload as { message?: string }).message as string);
+      }
+    };
+
+    const handleError = (payload: unknown) => {
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        'message' in payload &&
+        (payload as { message?: string }).message
+      ) {
+        message.error((payload as { message?: string }).message as string);
+      }
+    };
+
     wsService.on('player_joined', refresh);
     wsService.on('player_left', refresh);
-    wsService.on('system_message', refresh);
+    wsService.on('system_message', handleSystemMessage);
+    wsService.on('error', handleError);
+
     return () => {
       wsService.off('player_joined', refresh);
       wsService.off('player_left', refresh);
-      wsService.off('system_message', refresh);
+      wsService.off('system_message', handleSystemMessage);
+      wsService.off('error', handleError);
     };
   }, [token, loadRooms]);
 
@@ -82,6 +113,7 @@ function Rooms() {
     try {
       await roomAPI.join(roomId);
       message.success('加入房间成功');
+      wsService.trackRoom(roomId);
       loadRooms();
       navigate(`/rooms/${roomId}/wait`);
     } catch (err) {
@@ -96,6 +128,7 @@ function Rooms() {
     try {
       await roomAPI.leave(roomId);
       message.success('已离开房间');
+      wsService.untrackRoom(roomId);
       loadRooms();
     } catch (err) {
       message.error(getErrMsg(err, '离开房间失败'));
@@ -125,7 +158,30 @@ function Rooms() {
         </Form>
       </Card>
 
-      <Card title="房间列表" extra={<Tag color="blue">卡片视图</Tag>}>
+      <Card
+        title="房间列表"
+        extra={
+          <Space>
+            <Tag
+              color={
+                socketStatus === 'connected'
+                  ? 'green'
+                  : socketStatus === 'connecting'
+                    ? 'orange'
+                    : 'red'
+              }
+            >
+              WebSocket：
+              {socketStatus === 'connected'
+                ? '已连接'
+                : socketStatus === 'connecting'
+                  ? '连接中'
+                  : '未连接'}
+            </Tag>
+            <Tag color="blue">卡片视图</Tag>
+          </Space>
+        }
+      >
         {rooms.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无房间" />
         ) : (

@@ -8,6 +8,7 @@ import ResetPassword from './pages/ResetPassword';
 import TestWebSocket from './pages/TestWebSocket';
 import Rooms from './pages/Rooms';
 import WaitingRoom from './pages/WaitingRoom';
+import HostSetup from './pages/HostSetup';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -40,6 +41,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <WaitingRoom />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rooms/:roomId/host-setup"
+              element={
+                <ProtectedRoute>
+                  <HostSetup />
                 </ProtectedRoute>
               }
             />

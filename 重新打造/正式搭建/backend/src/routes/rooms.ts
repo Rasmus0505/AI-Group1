@@ -14,6 +14,64 @@ const parsePositiveInt = (value: any, fallback: number) => {
   return Math.floor(n);
 };
 
+const ensureRoomHost = async (roomId: string, userId: string) => {
+  const room = await prisma.room.findUnique({ where: { id: roomId } });
+  if (!room) {
+    throw new AppError('房间不存在', 404);
+  }
+  if (room.hostId !== userId) {
+    throw new AppError('只有房主可以操作主持人配置', 403);
+  }
+  return room;
+};
+
+const getOrCreateHostConfig = async (roomId: string, userId: string) => {
+  const existing = await prisma.hostConfig.findUnique({ where: { roomId } });
+  if (existing) return existing;
+  const room = await prisma.room.findUnique({ where: { id: roomId } });
+  if (!room) throw new AppError('房间不存在', 404);
+
+  return prisma.hostConfig.create({
+    data: {
+      roomId,
+      createdBy: userId,
+      apiConfig: {},
+      apiProvider: null,
+      apiEndpoint: null,
+      apiHeaders: null,
+      apiBodyTemplate: null,
+      totalDecisionEntities: room.maxPlayers,
+      humanPlayerCount: Math.max(room.currentPlayers, 1),
+      aiPlayerCount: 0,
+      decisionTimeLimit: 4,
+      timeoutStrategy: 'auto_submit',
+    },
+  });
+};
+
+const toHostConfigResponse = (cfg: any) => ({
+  id: cfg.id,
+  roomId: cfg.roomId,
+  apiProvider: cfg.apiProvider,
+  apiEndpoint: cfg.apiEndpoint,
+  apiHeaders: cfg.apiHeaders,
+  apiBodyTemplate: cfg.apiBodyTemplate,
+  apiConfig: cfg.apiConfig,
+  gameRules: cfg.gameRules,
+  totalDecisionEntities: cfg.totalDecisionEntities,
+  humanPlayerCount: cfg.humanPlayerCount,
+  aiPlayerCount: cfg.aiPlayerCount,
+  decisionTimeLimit: cfg.decisionTimeLimit,
+  timeoutStrategy: cfg.timeoutStrategy,
+  validationStatus: cfg.validationStatus,
+  validationMessage: cfg.validationMessage,
+  validatedAt: cfg.validatedAt,
+  configurationCompletedAt: cfg.configurationCompletedAt,
+  initializationCompleted: cfg.initializationCompleted,
+  createdAt: cfg.createdAt,
+  updatedAt: cfg.updatedAt,
+});
+
 /**
  * POST /api/rooms/create
  * 创建房间
@@ -229,5 +287,272 @@ router.post('/:roomId/leave', authenticateToken, async (req: AuthRequest, res, n
   }
 });
 
-export default router;
+/**
+ * GET /api/rooms/:roomId/host-config
+ * 获取主持人配置
+ */
+router.get('/:roomId/host-config', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
 
+    await ensureRoomHost(roomId, userId);
+    const cfg = await getOrCreateHostConfig(roomId, userId);
+
+    res.json({ code: 200, data: toHostConfigResponse(cfg) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/rooms/:roomId/host-config
+ * 保存综合配置（一次性提交）
+ */
+router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
+    const {
+      apiProvider,
+      apiEndpoint,
+      apiHeaders,
+      apiBodyTemplate,
+      gameRules,
+      totalDecisionEntities,
+      humanPlayerCount,
+      aiPlayerCount,
+      decisionTimeLimit,
+      timeoutStrategy,
+    } = req.body || {};
+
+    await ensureRoomHost(roomId, userId);
+
+    const total = Number(totalDecisionEntities ?? humanPlayerCount + aiPlayerCount);
+    const human = Number(humanPlayerCount ?? 0);
+    const ai = Number(aiPlayerCount ?? 0);
+    const timeLimit = Number(decisionTimeLimit ?? 4);
+    if (total <= 0 || human < 0 || ai < 0) throw new AppError('人数配置不合法', 400);
+    if (human + ai !== total) throw new AppError('totalDecisionEntities 必须等于人类+AI数量', 400);
+    if (timeLimit <= 0) throw new AppError('决策时限必须大于0', 400);
+
+    const cfg = await getOrCreateHostConfig(roomId, userId);
+    const updated = await prisma.hostConfig.update({
+      where: { id: cfg.id },
+      data: {
+        apiProvider: apiProvider ?? cfg.apiProvider,
+        apiEndpoint: apiEndpoint ?? cfg.apiEndpoint,
+        apiHeaders: apiHeaders ?? cfg.apiHeaders,
+        apiBodyTemplate: apiBodyTemplate ?? cfg.apiBodyTemplate,
+        apiConfig: {
+          ...(cfg.apiConfig as object),
+          provider: apiProvider ?? (cfg.apiConfig as any)?.provider,
+          endpoint: apiEndpoint ?? (cfg.apiConfig as any)?.endpoint,
+          headers: apiHeaders ?? (cfg.apiConfig as any)?.headers,
+          bodyTemplate: apiBodyTemplate ?? (cfg.apiConfig as any)?.bodyTemplate,
+        },
+        gameRules: gameRules ?? cfg.gameRules,
+        totalDecisionEntities: total,
+        humanPlayerCount: human,
+        aiPlayerCount: ai,
+        decisionTimeLimit: timeLimit,
+        timeoutStrategy: timeoutStrategy ?? cfg.timeoutStrategy,
+        validationStatus: 'pending',
+        validationMessage: null,
+      },
+    });
+
+    res.json({ code: 200, message: '主持人配置已保存', data: toHostConfigResponse(updated) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/rooms/:roomId/host-config/api
+ * 更新 API 配置
+ */
+router.post('/:roomId/host-config/api', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
+    const { apiProvider, apiEndpoint, apiHeaders, apiBodyTemplate } = req.body || {};
+
+    await ensureRoomHost(roomId, userId);
+    const cfg = await getOrCreateHostConfig(roomId, userId);
+
+    const updated = await prisma.hostConfig.update({
+      where: { id: cfg.id },
+      data: {
+        apiProvider: apiProvider ?? cfg.apiProvider,
+        apiEndpoint: apiEndpoint ?? cfg.apiEndpoint,
+        apiHeaders: apiHeaders ?? cfg.apiHeaders,
+        apiBodyTemplate: apiBodyTemplate ?? cfg.apiBodyTemplate,
+        apiConfig: {
+          ...(cfg.apiConfig as object),
+          provider: apiProvider ?? (cfg.apiConfig as any)?.provider,
+          endpoint: apiEndpoint ?? (cfg.apiConfig as any)?.endpoint,
+          headers: apiHeaders ?? (cfg.apiConfig as any)?.headers,
+          bodyTemplate: apiBodyTemplate ?? (cfg.apiConfig as any)?.bodyTemplate,
+        },
+        validationStatus: 'pending',
+        validationMessage: null,
+      },
+    });
+
+    res.json({ code: 200, message: 'API 配置已更新', data: toHostConfigResponse(updated) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/rooms/:roomId/host-config/rules
+ * 更新游戏规则
+ */
+router.post(
+  '/:roomId/host-config/rules',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { roomId } = req.params;
+      if (!userId) throw new AppError('Unauthorized', 401);
+      const { gameRules } = req.body || {};
+
+      await ensureRoomHost(roomId, userId);
+      const cfg = await getOrCreateHostConfig(roomId, userId);
+      const updated = await prisma.hostConfig.update({
+        where: { id: cfg.id },
+        data: {
+          gameRules: gameRules ?? cfg.gameRules,
+          validationStatus: 'pending',
+          validationMessage: null,
+        },
+      });
+
+      res.json({ code: 200, message: '规则已更新', data: toHostConfigResponse(updated) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/rooms/:roomId/host-config/players
+ * 更新玩家/实体配置
+ */
+router.post(
+  '/:roomId/host-config/players',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { roomId } = req.params;
+      if (!userId) throw new AppError('Unauthorized', 401);
+      const {
+        totalDecisionEntities,
+        humanPlayerCount,
+        aiPlayerCount,
+        decisionTimeLimit,
+        timeoutStrategy,
+      } = req.body || {};
+
+      await ensureRoomHost(roomId, userId);
+      const total = Number(totalDecisionEntities ?? humanPlayerCount + aiPlayerCount);
+      const human = Number(humanPlayerCount ?? 0);
+      const ai = Number(aiPlayerCount ?? 0);
+      const timeLimit = Number(decisionTimeLimit ?? 4);
+      if (total <= 0 || human < 0 || ai < 0) throw new AppError('人数配置不合法', 400);
+      if (human + ai !== total)
+        throw new AppError('totalDecisionEntities 必须等于人类+AI数量', 400);
+      if (timeLimit <= 0) throw new AppError('决策时限必须大于0', 400);
+
+      const cfg = await getOrCreateHostConfig(roomId, userId);
+      const updated = await prisma.hostConfig.update({
+        where: { id: cfg.id },
+        data: {
+          totalDecisionEntities: total,
+          humanPlayerCount: human,
+          aiPlayerCount: ai,
+          decisionTimeLimit: timeLimit,
+          timeoutStrategy: timeoutStrategy ?? cfg.timeoutStrategy,
+          validationStatus: 'pending',
+          validationMessage: null,
+        },
+      });
+
+      res.json({ code: 200, message: '玩家配置已更新', data: toHostConfigResponse(updated) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/rooms/:roomId/host-config/validate
+ * 标记验证状态
+ */
+router.post(
+  '/:roomId/host-config/validate',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { roomId } = req.params;
+      if (!userId) throw new AppError('Unauthorized', 401);
+      const { status, message } = req.body || {};
+
+      await ensureRoomHost(roomId, userId);
+      const cfg = await getOrCreateHostConfig(roomId, userId);
+      const updated = await prisma.hostConfig.update({
+        where: { id: cfg.id },
+        data: {
+          validationStatus: status ?? 'validated',
+          validationMessage: message ?? null,
+          validatedAt: new Date(),
+        },
+      });
+
+      res.json({ code: 200, message: '验证状态已更新', data: toHostConfigResponse(updated) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/rooms/:roomId/host-config/complete
+ * 完成主持人配置
+ */
+router.post(
+  '/:roomId/host-config/complete',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { roomId } = req.params;
+      if (!userId) throw new AppError('Unauthorized', 401);
+
+      await ensureRoomHost(roomId, userId);
+      const cfg = await getOrCreateHostConfig(roomId, userId);
+
+      const updated = await prisma.hostConfig.update({
+        where: { id: cfg.id },
+        data: {
+          initializationCompleted: true,
+          configurationCompletedAt: new Date(),
+        },
+      });
+
+      res.json({ code: 200, message: '主持人初始化已完成', data: toHostConfigResponse(updated) });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+export default router;
