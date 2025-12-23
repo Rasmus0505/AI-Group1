@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Form, Input, InputNumber, Space, Tag, message, Row, Col, Empty } from 'antd';
+import { Button, Form, Input, InputNumber, Space, Tag, message, Empty } from 'antd';
 import { roomAPI, RoomSummary } from '../services/rooms';
 import { wsService } from '../services/websocket';
 import { useAuthStore } from '../stores/authStore';
@@ -196,57 +196,60 @@ function Rooms() {
   };
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Card title="创建房间">
-        <Form form={form} layout="inline" initialValues={{ maxPlayers: 4 }}>
-          <Form.Item name="name" rules={[{ required: true, message: '请输入房间名称' }]}>
-            <Input placeholder="房间名称" style={{ width: 200 }} />
-          </Form.Item>
-          <Form.Item name="maxPlayers" rules={[{ required: true, message: '请输入人数上限' }]}>
-            <InputNumber min={2} max={10} placeholder="人数上限" />
-          </Form.Item>
-          <Form.Item name="password">
-            <Input.Password placeholder="房间密码（可选）" style={{ width: 200 }} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" onClick={handleCreate} loading={createLoading}>
-              创建
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+    <div className="rooms-shell">
+      <div className="grid-lines" />
+      <div className="rooms-content">
+        <div className="card-plate">
+          <div className="rooms-header" style={{ marginBottom: 16 }}>
+            <div className="rooms-title">创建房间</div>
+          </div>
+          <Form form={form} layout="inline" className="create-room" initialValues={{ maxPlayers: 4 }}>
+            <Form.Item name="name" rules={[{ required: true, message: '请输入房间名称' }]}>
+              <Input placeholder="房间名称" style={{ width: 220 }} />
+            </Form.Item>
+            <Form.Item name="maxPlayers" rules={[{ required: true, message: '请输入人数上限' }]}>
+              <InputNumber min={2} max={10} placeholder="人数上限" />
+            </Form.Item>
+            <Form.Item name="password">
+              <Input.Password placeholder="房间密码（可选）" style={{ width: 220 }} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" onClick={handleCreate} loading={createLoading} style={{ height: 40, paddingInline: 20 }}>
+                创建
+              </Button>
+            </Form.Item>
+          </Form>
+        </div>
 
-      <Card
-        title="房间列表"
-        extra={
-          <Space>
-            <Tag
-              color={
-                socketStatus === 'connected'
-                  ? 'green'
-                  : socketStatus === 'connecting'
-                    ? 'orange'
-                    : 'red'
-              }
-            >
-              WebSocket：
-              {socketStatus === 'connected'
-                ? '已连接'
-                : socketStatus === 'connecting'
-                  ? '连接中'
-                  : '未连接'}
-            </Tag>
-            <Tag color="blue">卡片视图</Tag>
-          </Space>
-        }
-      >
-        {rooms.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无房间" />
-        ) : (
-          <Row gutter={[16, 16]}>
-            {rooms.map(room => (
-              <Col key={room.id} xs={24} sm={12} md={8} lg={6}>
+        <div className="card-plate">
+          <div className="rooms-header">
+            <div className="rooms-title">房间列表</div>
+            <div className="status-badges">
+              <Tag
+                style={{ borderRadius: 999, paddingInline: 12 }}
+                color={
+                  socketStatus === 'connected'
+                    ? 'green'
+                    : socketStatus === 'connecting'
+                      ? 'orange'
+                      : 'red'
+                }
+              >
+                WebSocket：{socketStatus === 'connected' ? '已连接' : socketStatus === 'connecting' ? '连接中' : '未连接'}
+              </Tag>
+              <Tag color="blue" style={{ borderRadius: 999, paddingInline: 12 }}>
+                卡片视图
+              </Tag>
+            </div>
+          </div>
+
+          {rooms.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无房间" />
+          ) : (
+            <div className="rooms-grid">
+              {rooms.map(room => (
                 <RoomCard
+                  key={room.id}
                   room={room}
                   onJoin={handleJoin}
                   onLeave={handleLeave}
@@ -255,12 +258,12 @@ function Rooms() {
                   isHost={room.hostId === user?.userId}
                   loading={actionRoomId === room.id || loading}
                 />
-              </Col>
-            ))}
-          </Row>
-        )}
-      </Card>
-    </Space>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
