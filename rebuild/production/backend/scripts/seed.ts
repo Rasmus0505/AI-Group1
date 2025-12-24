@@ -165,10 +165,10 @@ async function main() {
               max_tokens: 2000,
               stream: true
             },
-            gameRules: `# 末日生存：废土之王\n\n**背景**：2050年，资源枯竭。\n**规则**：\n1. 每回合提交一项决策。\n2. 决策影响生命值、食物和金钱。\n3. 支持玩家间交易。`,
+            gameRules: `# 《凡墙皆是门》商业博弈\n\n**背景**：多家企业在竞争激烈的市场中角逐。\n**规则**：\n1. 每回合代表一个季度，提交决策指令。\n2. 决策影响现金、市场份额、品牌声誉。\n3. 支持玩家间交易与合作。\n4. 现金流断裂则破产出局。`,
             totalDecisionEntities: 4,
-            humanPlayerCount: 1,
-            aiPlayerCount: 3,
+            humanPlayerCount: 4,
+            aiPlayerCount: 0,
             decisionTimeLimit: 120,
             timeoutStrategy: 'auto_submit',
             initializationCompleted: true,

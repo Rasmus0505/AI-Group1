@@ -284,13 +284,14 @@ function Get-LocalLanIP {
         $_.IPAddress -notlike "172.*" -and           # 排除所有172网段（Docker/WSL/Hyper-V）
         $_.IPAddress -notlike "198.18.*" -and        # 排除代理软件虚拟网卡
         $_.IPAddress -notlike "169.254.*" -and       # 排除 APIPA
+        $_.IPAddress -ne "10.0.0.1" -and             # 排除虚拟网卡常用地址
         $_.PrefixOrigin -ne "WellKnown"              # 排除系统保留地址
     }
     
-    # 优先选择 10.x 网段（教室/公司局域网常用）
+    # 优先选择 10.x 网段（教室/公司局域网常用，但排除10.0.0.x）
     foreach ($adapter in $networkAdapters) {
         $ip = $adapter.IPAddress
-        if ($ip -like "10.*") {
+        if ($ip -like "10.*" -and $ip -notlike "10.0.0.*") {
             return $ip
         }
     }

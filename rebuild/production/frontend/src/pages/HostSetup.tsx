@@ -721,27 +721,98 @@ function HostSetup() {
         <Divider />
 
         <Form form={formPlayers} layout="vertical" onFinish={handleSavePlayers}>
+          <Alert
+            message="人数配置公式"
+            description="人类玩家数 + AI玩家数 = 总决策主体数"
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
           <Form.Item
             label="总决策主体数"
             name="totalDecisionEntities"
             rules={[{ required: true, message: '请输入总主体数' }]}
-            tooltip="游戏中参与决策的企业/角色总数"
+            tooltip="游戏中参与决策的企业/角色总数（人类玩家 + AI玩家）"
           >
-            <InputNumber min={2} max={10} placeholder="2-10" style={{ width: 120 }} />
+            <InputNumber 
+              min={2} 
+              max={10} 
+              placeholder="2-10" 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value) {
+                  const humanCount = formPlayers.getFieldValue('humanPlayerCount') || 0;
+                  const aiCount = value - humanCount;
+                  if (aiCount >= 0) {
+                    formPlayers.setFieldsValue({ aiPlayerCount: aiCount });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="人类玩家数"
             name="humanPlayerCount"
-            rules={[{ required: true, message: '请输入人类玩家数' }]}
+            rules={[
+              { required: true, message: '请输入人类玩家数' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const total = getFieldValue('totalDecisionEntities');
+                  const aiCount = getFieldValue('aiPlayerCount') || 0;
+                  if (total && value + aiCount !== total) {
+                    return Promise.reject(new Error(`人类玩家(${value}) + AI玩家(${aiCount}) 必须等于总主体数(${total})`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
           >
-            <InputNumber min={1} placeholder="请输入..." style={{ width: 120 }} />
+            <InputNumber 
+              min={1} 
+              placeholder="请输入..." 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value !== null && value !== undefined) {
+                  const total = formPlayers.getFieldValue('totalDecisionEntities');
+                  if (total) {
+                    const aiCount = total - value;
+                    formPlayers.setFieldsValue({ aiPlayerCount: Math.max(0, aiCount) });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="AI玩家数"
             name="aiPlayerCount"
-            rules={[{ required: true, message: '请输入AI玩家数' }]}
+            rules={[
+              { required: true, message: '请输入AI玩家数' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const total = getFieldValue('totalDecisionEntities');
+                  const humanCount = getFieldValue('humanPlayerCount') || 0;
+                  if (total && humanCount + value !== total) {
+                    return Promise.reject(new Error(`人类玩家(${humanCount}) + AI玩家(${value}) 必须等于总主体数(${total})`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
           >
-            <InputNumber min={0} placeholder="请输入..." style={{ width: 120 }} />
+            <InputNumber 
+              min={0} 
+              placeholder="请输入..." 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value !== null && value !== undefined) {
+                  const total = formPlayers.getFieldValue('totalDecisionEntities');
+                  if (total) {
+                    const humanCount = total - value;
+                    formPlayers.setFieldsValue({ humanPlayerCount: Math.max(1, humanCount) });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="决策时限(分钟)"
