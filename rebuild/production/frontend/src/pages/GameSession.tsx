@@ -291,6 +291,20 @@ function GameSessionPage() {
     };
   }, [sessionId, loadDecisions, loadTurnResult, navigate, handleAchievementUnlock]);
 
+  // 键盘快捷键：Ctrl+Enter 提交决策
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (session?.roundStatus === 'decision' && decisionText.trim() && !submitting) {
+          handleSubmitDecision();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [session?.roundStatus, decisionText, submitting]);
+
   const handleSubmitDecision = async () => {
     if (!sessionId || !session) return;
     
@@ -744,13 +758,32 @@ function GameSessionPage() {
                   <span className="info-chip">
                     <MessageSquare size={14} /> 决策输入
                   </span>
-                  <span className="text-xs text-slate-500">{decisionText.length} / 500</span>
+                  <span className={`text-xs ${decisionText.length > 400 ? 'text-amber-500 font-medium' : 'text-slate-500'}`}>
+                    {decisionText.length} / 500
+                    {decisionText.length > 0 && decisionText.length < 10 && (
+                      <span className="ml-2 text-slate-400">建议输入更详细的描述</span>
+                    )}
+                  </span>
+                </div>
+                {/* 快捷短语标签 */}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {['投资研发', '扩大市场', '降低成本', '寻求合作', '观望等待', '防御策略'].map(phrase => (
+                    <Tag
+                      key={phrase}
+                      color="blue"
+                      style={{ cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => setDecisionText(prev => prev ? `${prev}，${phrase}` : phrase)}
+                    >
+                      + {phrase}
+                    </Tag>
+                  ))}
                 </div>
                 <TextArea
                   rows={10}
                   value={decisionText}
                   onChange={e => setDecisionText(e.target.value)}
                   placeholder={getPlaceholderText()}
+                  maxLength={500}
                   className="decision-input"
                   style={{ flex: 1 }}
                 />
@@ -782,7 +815,10 @@ function GameSessionPage() {
                     </Space>
                   </div>
                 )}
-                <div className="decision-actions">
+                <div className="decision-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="text-xs text-slate-400">
+                    提示：按 Ctrl+Enter 快速提交
+                  </span>
                   <Button
                     type="primary"
                     size="middle"

@@ -1,12 +1,13 @@
 import { Button, Typography } from 'antd';
 import {
   ArrowRightOutlined,
-
   LoginOutlined,
   UserOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import ConnectionStatus from '../components/ConnectionStatus';
 
 const { Title, Paragraph, Text } = Typography;
 
