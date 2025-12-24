@@ -114,10 +114,10 @@ export class AIService {
       prompt += '3. 被动收支：每回合开始时，为每个主体结算被动收益（如稳健业务收入）和被动支出（如固定成本）。\n';
       prompt += '4. 决策：玩家可以为主体输入多项主动决策指令。未收到指令的主体，只结算被动收支，不触发新的主动事件。\n';
       prompt += '5. 现金流与破产：若现金余额小于必要支出（被动支出 + 本回合决策支出），视为现金流断裂，可能导致主体破产或丧失下一回合的决策权。\n';
-    prompt += '6. 事件：每回合可发生正向、负向或中性事件；允许多回合持续的长时间线事件，并跟踪其进度；事件需体现各主体决策对其他主体和整体市场的交叉影响。\n';
-    prompt += '7. 卦象与随机性：每年根据周易卦象生成一条「年度叙事暗线」，用于影响事件风格与触发概率；随机事件既参考卦象，又参考各主体当前属性。\n';
-    prompt += '8. 成就与评分：为关键性决策结果赋予阶段性成就标签；游戏在适当时刻给出评分面板，总结各主体表现。\n';
-    prompt += '9. 现金流安全：若余额接近被动支出临界，需明确标注风险；未收到指令的主体只结算被动收支，不触发新的主动行动。\n\n';
+      prompt += '6. 事件：每回合可发生正向、负向或中性事件；允许多回合持续的长时间线事件，并跟踪其进度；事件需体现各主体决策对其他主体和整体市场的交叉影响。\n';
+      prompt += '7. 卦象与随机性：每年根据周易卦象生成一条「年度叙事暗线」，用于影响事件风格与触发概率；随机事件既参考卦象，又参考各主体当前属性。\n';
+      prompt += '8. 成就与评分：为关键性决策结果赋予阶段性成就标签；游戏在适当时刻给出评分面板，总结各主体表现。\n';
+      prompt += '9. 现金流安全：若余额接近被动支出临界，需明确标注风险；未收到指令的主体只结算被动收支，不触发新的主动行动。\n\n';
     }
 
     // 活跃事件（包含详细进度信息）
@@ -304,7 +304,7 @@ export class AIService {
         };
 
         const result = replacePlaceholders(body);
-        
+
         // 验证结果
         if (!result || typeof result !== 'object') {
           throw new Error('Invalid bodyTemplate: result is not an object');
@@ -409,12 +409,12 @@ export class AIService {
         model: requestBody.model,
         hasMessages: 'messages' in requestBody,
         messagesCount: Array.isArray(requestBody.messages) ? requestBody.messages.length : 0,
-        messagesPreview: Array.isArray(requestBody.messages) 
+        messagesPreview: Array.isArray(requestBody.messages)
           ? requestBody.messages.map((m: any) => ({
-              role: m.role,
-              contentLength: m.content?.length || 0,
-              contentPreview: m.content?.substring(0, 100) || '',
-            }))
+            role: m.role,
+            contentLength: m.content?.length || 0,
+            contentPreview: m.content?.substring(0, 100) || '',
+          }))
           : [],
         temperature: requestBody.temperature,
         maxTokens: requestBody.max_tokens || requestBody.maxTokens,
@@ -427,7 +427,7 @@ export class AIService {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         logger.info(`Calling AI API (attempt ${attempt}/${retries}): ${config.endpoint}`);
-        
+
         const response = await axios(axiosConfig);
 
         // Log the raw response for debugging
@@ -437,14 +437,14 @@ export class AIService {
           headers: Object.keys(response.headers || {}),
           dataType: typeof response.data,
           dataKeys: typeof response.data === 'object' && response.data !== null ? Object.keys(response.data) : 'N/A',
-          responsePreview: typeof response.data === 'string' 
-            ? response.data.substring(0, 500) 
+          responsePreview: typeof response.data === 'string'
+            ? response.data.substring(0, 500)
             : JSON.stringify(response.data).substring(0, 500),
         });
 
         // 解析响应（根据不同的AI服务提供商可能有不同的格式）
         const parsed = this.parseResponse(response.data, config.provider || 'default');
-        
+
         logger.info(`AI API response parsed successfully`, {
           hasNarrative: !!parsed.narrative,
           narrativeLength: parsed.narrative?.length || 0,
@@ -452,19 +452,19 @@ export class AIService {
           eventsCount: parsed.events?.length || 0,
           parsedKeys: Object.keys(parsed),
         });
-        
+
         return parsed;
       } catch (error: any) {
         lastError = error;
-        
+
         // 构建详细的错误信息
         let errorMessage = error.message || 'Unknown error';
-        
+
         if (error.response) {
           // HTTP错误响应
           const status = error.response.status;
           const data = error.response.data;
-          
+
           if (status === 401) {
             errorMessage = 'API密钥无效或已过期，请检查Authorization头配置';
           } else if (status === 404) {
@@ -487,7 +487,7 @@ export class AIService {
         } else if (error.message?.includes('socket') || error.message?.includes('TLS')) {
           errorMessage = '网络socket连接异常，可能是网络不稳定';
         }
-        
+
         logger.warn(`AI API call failed (attempt ${attempt}/${retries}): ${errorMessage}`, {
           endpoint: config.endpoint,
           errorCode: error.code,
@@ -526,11 +526,11 @@ export class AIService {
       isNull: data === null,
       isArray: Array.isArray(data),
       keys: typeof data === 'object' && data !== null ? Object.keys(data) : 'N/A',
-      fullDataPreview: typeof data === 'string' 
-        ? data.substring(0, 1000) 
+      fullDataPreview: typeof data === 'string'
+        ? data.substring(0, 1000)
         : JSON.stringify(data).substring(0, 1000),
     });
-    
+
     if (typeof data !== 'object' || data === null) {
       logger.warn(`AI response is not an object for provider: ${provider}, using default format`, {
         dataType: typeof data,
@@ -709,7 +709,7 @@ export class AIService {
     });
 
     const result = await this.callAI(config, prompt);
-    
+
     logger.info(`AI inference completed for session ${request.sessionId}, round ${request.round}`, {
       hasNarrative: !!result.narrative,
       narrativeLength: result.narrative?.length || 0,
@@ -755,7 +755,7 @@ export class AIService {
   }>> {
     // Build prompt for generating decision options
     let prompt = `# Generate Decision Options\n\n`;
-    
+
     if (gameRules && gameRules.trim()) {
       prompt += `## Game Rules\n${gameRules.trim()}\n\n`;
     }
@@ -767,7 +767,7 @@ export class AIService {
     prompt += `## Player Information\n`;
     prompt += `- Player Index: ${playerInfo.playerIndex}\n`;
     prompt += `- Player Name: ${playerInfo.username}${playerInfo.nickname ? ` (${playerInfo.nickname})` : ''}\n`;
-    
+
     if (playerInfo.resources) {
       prompt += `- Current Resources: ${JSON.stringify(playerInfo.resources)}\n`;
     }

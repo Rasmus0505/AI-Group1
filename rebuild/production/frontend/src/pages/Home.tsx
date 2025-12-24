@@ -1,24 +1,16 @@
 import { Button, Typography } from 'antd';
 import {
   ArrowRightOutlined,
-  TeamOutlined,
+
   LoginOutlined,
   UserOutlined,
-  EyeOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
-import UserRegistryPanel from '../components/UserRegistryPanel';
-import OnlineRoomsPanel from '../components/OnlineRoomsPanel';
-import ConnectionStatus from '../components/ConnectionStatus';
 import { useAuthStore } from '../stores/authStore';
 
 const { Title, Paragraph, Text } = Typography;
 
 function Home() {
-  const [userPanelOpen, setUserPanelOpen] = useState(false);
-  const [roomsPanelOpen, setRoomsPanelOpen] = useState(false);
   const { user, logout } = useAuthStore();
 
   return (
@@ -73,44 +65,20 @@ function Home() {
             </div>
 
             <div className="stack-cards">
-              <div className="side-card" style={{ background: 'linear-gradient(135deg, rgba(235, 250, 235, 0.7) 0%, rgba(245, 255, 245, 0.4) 100%)' }}>
-                <div className="side-head">
-                  <span className="side-dot" />
+              <div className="side-card" style={{ background: 'linear-gradient(135deg, rgba(235, 250, 235, 0.7) 0%, rgba(245, 255, 245, 0.4) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                <div className="side-head" style={{ justifyContent: 'center', width: '100%' }}>
                   <span>快速入口</span>
                 </div>
                 <p className="side-desc">直接浏览房间列表，随时加入或创建新的战局。</p>
-                <Link to="/rooms" className="btn-strong slim" style={{ background: 'rgba(200, 235, 200, 0.3)', color: '#0f172a', border: '1px solid rgba(127, 201, 127, 0.15)', boxShadow: 'none' }}>
+                <Link to="/rooms" className="btn-strong" style={{ background: 'rgba(200, 235, 200, 0.3)', color: '#0f172a', border: '1px solid rgba(127, 201, 127, 0.15)', boxShadow: 'none', alignSelf: 'center', padding: '10px 24px', fontSize: '18px' }}>
                   开始匹配 <ArrowRightOutlined />
                 </Link>
-              </div>
-              <div className="side-card" style={{ background: 'linear-gradient(135deg, rgba(225, 248, 225, 0.8) 0%, rgba(240, 255, 240, 0.5) 100%)' }}>
-                <div className="side-head">
-                  <TeamOutlined />
-                  <span>查看在册用户</span>
-                </div>
-                <p className="side-desc">查看全部注册玩家，快速找到熟悉的队友。</p>
-                <button className="btn-ghost slim" onClick={() => setUserPanelOpen(true)} style={{ background: 'rgba(200, 235, 200, 0.3)', color: '#0f172a', border: '1px solid rgba(127, 201, 127, 0.15)' }}>
-                  打开名单 <ArrowRightOutlined />
-                </button>
-              </div>
-              <div className="side-card" style={{ background: 'linear-gradient(135deg, rgba(215, 245, 215, 0.85) 0%, rgba(235, 250, 235, 0.6) 100%)' }}>
-                <div className="side-head">
-                  <EyeOutlined />
-                  <span>在线房间</span>
-                </div>
-                <p className="side-desc">实时查看开放中的房间，选择加入或旁观。</p>
-                <button className="btn-ghost slim" onClick={() => setRoomsPanelOpen(true)} style={{ background: 'rgba(200, 235, 200, 0.3)', color: '#0f172a', border: '1px solid rgba(127, 201, 127, 0.15)' }}>
-                  去看看 <ArrowRightOutlined />
-                </button>
               </div>
             </div>
           </div>
         </section>
 
       </div>
-
-      <UserRegistryPanel open={userPanelOpen} onClose={() => setUserPanelOpen(false)} />
-      <OnlineRoomsPanel open={roomsPanelOpen} onClose={() => setRoomsPanelOpen(false)} />
     </div>
   );
 }
