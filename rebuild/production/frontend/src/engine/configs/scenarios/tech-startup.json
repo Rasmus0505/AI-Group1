@@ -1,0 +1,96 @@
+{
+  "$schema": "../scenario.schema.json",
+  "id": "tech-startup",
+  "name": "科技创业",
+  "version": "1.0.0",
+  "description": "科技创业公司竞争场景",
+  
+  "industry": "科技/互联网",
+  "initialCash": 500000,
+  
+  "initialAttributes": {
+    "市场份额": 5,
+    "品牌声誉": 30,
+    "创新能力": 70,
+    "技术储备": 60,
+    "用户规模": 10000
+  },
+  
+  "passiveIncomeItems": [
+    {
+      "name": "订阅收入",
+      "amount": 20000,
+      "description": "SaaS订阅服务收入"
+    },
+    {
+      "name": "广告收入",
+      "amount": 5000,
+      "description": "平台广告收入"
+    }
+  ],
+  
+  "passiveExpenseItems": [
+    {
+      "name": "服务器成本",
+      "amount": 8000,
+      "description": "云服务器运维费用"
+    },
+    {
+      "name": "研发团队薪资",
+      "amount": 15000,
+      "description": "技术团队人力成本"
+    },
+    {
+      "name": "办公租金",
+      "amount": 3000,
+      "description": "办公场地租金"
+    }
+  ],
+  
+  "backgroundStory": "在这个数字化转型的时代，几家科技创业公司正在激烈角逐市场份额。每家公司都有独特的技术优势和商业模式，它们需要在产品创新、用户增长和盈利能力之间找到平衡。资本市场的目光聚焦于此，下一个独角兽将从这场竞争中诞生。",
+  
+  "victoryCondition": "达到100万用户规模或市值突破10亿",
+  
+  "specialRules": [
+    "技术储备低于30时，产品迭代速度减半",
+    "用户规模每增长10万，广告收入增加20%",
+    "创新能力高于80时，有机会获得风投青睐"
+  ],
+  
+  "attributeRanges": {
+    "市场份额": { "min": 0, "max": 100 },
+    "品牌声誉": { "min": 0, "max": 100 },
+    "创新能力": { "min": 0, "max": 100 },
+    "技术储备": { "min": 0, "max": 100 },
+    "用户规模": { "min": 0, "max": 10000000 }
+  },
+  
+  "eventProbabilities": {
+    "positive": 0.35,
+    "neutral": 0.35,
+    "negative": 0.3
+  },
+  
+  "industrySpecificEvents": [
+    {
+      "id": "funding_round",
+      "name": "融资机会",
+      "type": "positive",
+      "probability": 0.15,
+      "condition": "创新能力 > 60 && 用户规模 > 50000"
+    },
+    {
+      "id": "tech_talent_war",
+      "name": "人才争夺战",
+      "type": "neutral",
+      "probability": 0.2
+    },
+    {
+      "id": "security_breach",
+      "name": "安全漏洞",
+      "type": "negative",
+      "probability": 0.1,
+      "condition": "技术储备 < 40"
+    }
+  ]
+}

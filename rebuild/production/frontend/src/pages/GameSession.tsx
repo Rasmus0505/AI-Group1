@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Input, Button, Tag, List, message,
@@ -15,26 +15,19 @@ import { useAuthStore } from '../stores/authStore';
 import { wsService } from '../services/websocket';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
+import { useDecisionTimer } from '../hooks/useDecisionTimer';
 import { GlassCard } from '../components/GlassCard';
 import ResourcePanel from '../components/ResourcePanel';
 import NarrativeFeed from '../components/NarrativeFeed';
 import ChatSystem from '../components/ChatSystem';
 import OpponentIntel, { OpponentIntelRecord } from '../components/OpponentIntel';
-import type { TurnResultDTO } from '../types/turnResult';
+import LeaderboardPanel from '../components/LeaderboardPanel';
+import AssessmentCards from '../components/AssessmentCards';
+import HexagramDisplay from '../components/HexagramDisplay';
+import { AchievementManager } from '../components/AchievementPopup';
+import type { TurnResultDTO, TurnAchievement, TurnHexagram } from '../types/turnResult';
 
 const { TextArea } = Input;
-
-function formatRemaining(deadline?: string | null): string {
-  if (!deadline) return '--:--';
-  const end = new Date(deadline).getTime();
-  const now = Date.now();
-  const diff = end - now;
-  if (diff <= 0) return '00:00';
-  const seconds = Math.floor(diff / 1000);
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
 
 function GameSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -58,11 +51,23 @@ function GameSessionPage() {
 
   const [turnResult, setTurnResult] = useState<TurnResultDTO | null>(null);
   const [gameState, setGameState] = useState<any>(null); // 完整的游戏状态（包含 players、currentHexagram 等）
+  // 新增：成就队列
+  const [pendingAchievements, setPendingAchievements] = useState<TurnAchievement[]>([]);
 
-  const isTimeout = useMemo(() => {
-    if (!session?.decisionDeadline) return false;
-    return currentTime > new Date(session.decisionDeadline).getTime();
-  }, [session?.decisionDeadline, currentTime]);
+  // 使用 useDecisionTimer hook
+  const timerState = useDecisionTimer({
+    deadline: session?.decisionDeadline || null,
+    enabled: session?.roundStatus === 'decision',
+    urgentThreshold: 60,
+    onUrgent: useCallback((remaining: number) => {
+      message.warning(`决策时间紧迫！还剩 ${remaining} 秒`);
+    }, []),
+    onTimeout: useCallback(() => {
+      message.error('决策时间已到！');
+    }, []),
+  });
+
+  const isTimeout = timerState.isTimeout;
 
   const getPlaceholderText = useMemo(() => {
     return () => {
@@ -104,6 +109,7 @@ function GameSessionPage() {
       try {
         const data = await gameAPI.getSession(sessionId);
         setSession(data);
+
 
         // 如果是主持人，跳转到游戏状态页面
         if (data.hostId && user?.id && data.hostId === user.id) {
@@ -180,6 +186,16 @@ function GameSessionPage() {
     loadOptions();
   }, [sessionId, session?.currentRound, session?.roundStatus]);
 
+  // 处理成就解锁（需要在 WebSocket useEffect 之前定义）
+  const handleAchievementUnlock = useCallback((achievements: TurnAchievement[]) => {
+    setPendingAchievements(prev => [...prev, ...achievements]);
+  }, []);
+
+  // 清除已显示的成就
+  const handleAchievementsClosed = useCallback(() => {
+    setPendingAchievements([]);
+  }, []);
+
   useEffect(() => {
     if (!sessionId) return;
     wsService.setActiveSession(sessionId);
@@ -208,15 +224,26 @@ function GameSessionPage() {
       }
     };
 
+    // 成就解锁事件
+    const handleAchievementUnlocked = (payload: any) => {
+      if (payload.achievement) {
+        handleAchievementUnlock([payload.achievement]);
+      } else if (payload.achievements) {
+        handleAchievementUnlock(payload.achievements);
+      }
+    };
+
     wsService.on('decision_status_update', handleDecisionStatusUpdate);
     wsService.on('game_state_update', handleGameStateUpdate);
+    wsService.on('achievement_unlocked', handleAchievementUnlocked);
 
     return () => {
       wsService.setActiveSession(null);
       wsService.off('decision_status_update', handleDecisionStatusUpdate);
       wsService.off('game_state_update', handleGameStateUpdate);
+      wsService.off('achievement_unlocked', handleAchievementUnlocked);
     };
-  }, [sessionId, loadDecisions, loadTurnResult, navigate]);
+  }, [sessionId, loadDecisions, loadTurnResult, navigate, handleAchievementUnlock]);
 
   const handleSubmitDecision = async () => {
     if (!sessionId || !session) return;
@@ -283,6 +310,28 @@ function GameSessionPage() {
     return turnResult.events.filter((e: any) => e.type === 'ongoing' || e.status === 'ongoing');
   }, [turnResult?.events]);
 
+  // 解析卦象数据为 TurnHexagram 格式
+  const parsedHexagram = useMemo((): TurnHexagram | null => {
+    if (!currentHexagram) return null;
+
+    // 如果已经是完整格式
+    if (typeof currentHexagram === 'object' && currentHexagram.lines) {
+      return currentHexagram as TurnHexagram;
+    }
+
+    // 如果是字符串或简单对象，构造默认格式
+    const name = typeof currentHexagram === 'string'
+      ? currentHexagram
+      : (currentHexagram as any)?.name || (currentHexagram as any)?.hexagram || '未知卦';
+
+    return {
+      name,
+      lines: ['yang', 'yin', 'yang', 'yin', 'yang', 'yin'], // 默认六爻
+      text: (currentHexagram as any)?.text || (currentHexagram as any)?.description || '',
+      omen: (currentHexagram as any)?.omen || 'neutral',
+    };
+  }, [currentHexagram]);
+
   // 早期返回必须在所有 hooks 调用之后
   if (!session) {
     return (
@@ -348,9 +397,12 @@ function GameSessionPage() {
           <div className="status-group">
             <div className="status-chip">
               <span className="text-[11px] text-slate-500 uppercase tracking-wider">剩余时间</span>
-              <span className={`text-xl font-mono font-bold ${isTimeout ? 'text-rose-500' : 'text-emerald-500'}`}>
-                {formatRemaining(session.decisionDeadline)}
+              <span className={`text-xl font-mono font-bold ${timerState.isTimeout ? 'text-rose-500' : timerState.isUrgent ? 'text-amber-500' : 'text-emerald-500'}`}>
+                {timerState.formattedTime}
               </span>
+              {timerState.isUrgent && !timerState.isTimeout && (
+                <span className="text-[10px] text-amber-500 animate-pulse">紧急!</span>
+              )}
             </div>
             <div className="status-chip" style={{ gap: 6, display: 'flex', alignItems: 'center' }}>
               <div
@@ -577,54 +629,37 @@ function GameSessionPage() {
           {/* 右侧栏 - 统计与任务 */}
           <Col span={6} className="col-stack">
             <GlassCard className="card-panel h-full">
-              <div className="card-header-line">
-                <div className="card-title-sm flex items-center gap-2">
-                  <Trophy size={16} className="text-amber-500" /> 全局排行
-                </div>
-              </div>
               {turnResult && turnResult.leaderboard.length > 0 ? (
-                <List
-                  className="list-tight"
-                  size="small"
-                  dataSource={turnResult.leaderboard}
-                  renderItem={(entry) => {
-                    const maxScore =
-                      turnResult.leaderboard.reduce(
-                        (max, e) => (e.score > max ? e.score : max),
-                        1
-                      ) || 1;
-                    const width = Math.max(8, Math.round((entry.score / maxScore) * 100));
-                    return (
-                      <div className="flex items-center gap-3 py-1">
-                        <span
-                          className={`text-lg font-black ${entry.rank === 1 ? 'text-amber-500' : 'text-slate-400'
-                            }`}
-                        >
-                          {String(entry.rank).padStart(2, '0')}
-                        </span>
-                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-indigo-500 transition-all duration-300"
-                            style={{ width: `${width}%` }}
-                          />
-                        </div>
-                        {typeof entry.rankChange === 'number' && entry.rankChange !== 0 && (
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            {entry.rankChange > 0
-                              ? `▲${entry.rankChange}`
-                              : `▼${Math.abs(entry.rankChange)}`}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  }}
+                <LeaderboardPanel
+                  entries={turnResult.leaderboard}
+                  currentPlayerId={user?.userId}
+                  showDetails={false}
                 />
               ) : (
-                <div className="text-xs text-slate-400 py-6 text-center">
-                  等待本回合推演完成后生成排行榜...
-                </div>
+                <>
+                  <div className="card-header-line">
+                    <div className="card-title-sm flex items-center gap-2">
+                      <Trophy size={16} className="text-amber-500" /> 全局排行
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400 py-6 text-center">
+                    等待本回合推演完成后生成排行榜...
+                  </div>
+                </>
               )}
             </GlassCard>
+
+            {/* 卦象显示 */}
+            {parsedHexagram && (
+              <GlassCard className="card-panel h-auto mt-3">
+                <div className="card-header-line">
+                  <div className="card-title-sm flex items-center gap-2">
+                    <Activity size={16} className="text-indigo-500" /> 当前卦象
+                  </div>
+                </div>
+                <HexagramDisplay hexagram={parsedHexagram} compact={false} />
+              </GlassCard>
+            )}
 
             {turnResult && (
               <GlassCard className="card-panel h-full mt-3">
@@ -633,32 +668,13 @@ function GameSessionPage() {
                     <Target size={16} className="text-rose-500" /> 本回合评估
                   </div>
                 </div>
-                <div className="space-y-2 text-xs text-slate-700">
-                  {turnResult.riskCard && (
-                    <div className="flex items-start gap-2">
-                      <span className="mt-[2px] text-rose-500 font-mono text-[10px] uppercase tracking-widest">
-                        Risk
-                      </span>
-                      <p className="leading-snug">{turnResult.riskCard}</p>
-                    </div>
-                  )}
-                  {turnResult.opportunityCard && (
-                    <div className="flex items-start gap-2">
-                      <span className="mt-[2px] text-emerald-500 font-mono text-[10px] uppercase tracking-widest">
-                        Opportunity
-                      </span>
-                      <p className="leading-snug">{turnResult.opportunityCard}</p>
-                    </div>
-                  )}
-                  {turnResult.benefitCard && (
-                    <div className="flex items-start gap-2">
-                      <span className="mt-[2px] text-sky-500 font-mono text-[10px] uppercase tracking-widest">
-                        Benefit
-                      </span>
-                      <p className="leading-snug">{turnResult.benefitCard}</p>
-                    </div>
-                  )}
-                </div>
+                <AssessmentCards
+                  riskCard={turnResult.riskCard}
+                  opportunityCard={turnResult.opportunityCard}
+                  benefitCard={turnResult.benefitCard}
+                  direction="vertical"
+                  compact={true}
+                />
               </GlassCard>
             )}
 
@@ -724,6 +740,12 @@ function GameSessionPage() {
             </GlassCard>
           </Col>
         </Row>
+
+        {/* 成就弹窗管理器 */}
+        <AchievementManager
+          achievements={pendingAchievements}
+          onAllClosed={handleAchievementsClosed}
+        />
       </div>
     </div>
   );

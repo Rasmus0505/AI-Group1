@@ -37,6 +37,126 @@ const ensureRoomHost = async (roomId: string, userId: string) => {
 };
 
 /**
+ * POST /api/game/:roomId/generate-init
+ * 生成游戏初始化数据（AI生成背景故事、主体状态、卦象等）
+ */
+router.post('/:roomId/generate-init', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
+
+    // 确保用户是主持人
+    await ensureRoomHost(roomId, userId);
+
+    const { entityCount, gameMode, initialCash, industryTheme } = req.body;
+
+    if (!entityCount || entityCount < 2) {
+      throw new AppError('主体数量至少为2', 400);
+    }
+
+    // 获取主持人配置
+    const hostConfig = await prisma.hostConfig.findUnique({ where: { roomId } });
+    if (!hostConfig || !hostConfig.apiEndpoint) {
+      throw new AppError('请先配置 AI API', 400);
+    }
+
+    const aiConfig: AIConfig = {
+      provider: hostConfig.apiProvider || null,
+      endpoint: hostConfig.apiEndpoint || null,
+      headers: (hostConfig.apiHeaders as Record<string, unknown>) || null,
+      bodyTemplate: (hostConfig.apiBodyTemplate as Record<string, unknown>) || null,
+    };
+
+    logger.info(`Generating game init for room ${roomId}`, {
+      entityCount,
+      gameMode,
+      initialCash,
+    });
+
+    const initResult = await aiService.initializeGame(aiConfig, {
+      entityCount,
+      gameMode: gameMode || 'multi_control',
+      initialCash: initialCash || 1000000,
+      gameRules: hostConfig.gameRules || undefined,
+      industryTheme,
+    });
+
+    res.json({
+      code: 200,
+      message: '游戏初始化数据生成成功',
+      data: initResult,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/game/:roomId/save-init
+ * 保存游戏初始化数据
+ */
+router.post('/:roomId/save-init', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
+
+    await ensureRoomHost(roomId, userId);
+
+    const initData = req.body;
+    if (!initData || !initData.backgroundStory || !initData.entities) {
+      throw new AppError('初始化数据不完整', 400);
+    }
+
+    // 保存到 Redis（临时存储，游戏开始时会写入数据库）
+    const key = `game:init:${roomId}`;
+    await redis.set(key, JSON.stringify(initData), 'EX', 86400); // 24小时过期
+
+    logger.info(`Game init data saved for room ${roomId}`);
+
+    res.json({
+      code: 200,
+      message: '初始化数据已保存',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/game/:roomId/init
+ * 获取已保存的游戏初始化数据
+ */
+router.get('/:roomId/init', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { roomId } = req.params;
+    if (!userId) throw new AppError('Unauthorized', 401);
+
+    await ensureRoomMembership(roomId, userId);
+
+    const key = `game:init:${roomId}`;
+    const data = await redis.get(key);
+
+    if (!data) {
+      res.json({
+        code: 200,
+        data: null,
+      });
+      return;
+    }
+
+    res.json({
+      code: 200,
+      data: JSON.parse(data),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/game/:roomId/start
  * 开始游戏，创建或返回当前房间的 GameSession
  */
@@ -1972,7 +2092,7 @@ function buildTurnResultDTO(
 
   // 排行榜：基于现金和市场份额的简易得分
   const leaderboard = perEntityPanel
-    .map(p => ({
+    .map((p: { id: string; name: string; cash: number; marketShare?: number; reputation?: number; innovation?: number }) => ({
       id: p.id,
       name: p.name,
       score:
@@ -1981,8 +2101,8 @@ function buildTurnResultDTO(
         (p.reputation || 0) * 1 +
         (p.innovation || 0) * 1,
     }))
-    .sort((a, b) => b.score - a.score)
-    .map((item, idx) => ({
+    .sort((a: { score: number }, b: { score: number }) => b.score - a.score)
+    .map((item: { id: string; name: string; score: number }, idx: number) => ({
       ...item,
       rank: idx + 1,
     }));

@@ -34,40 +34,32 @@ function RootLayout() {
   );
 }
 
-const router = createBrowserRouter(
-  [
-    {
-      path: '/',
-      element: <RootLayout />,
-      children: [
-        { index: true, element: <ProtectedRoute><Home /></ProtectedRoute> },
-        { path: 'rooms', element: <ProtectedRoute><Rooms /></ProtectedRoute> },
-        { path: 'rooms/:roomId/wait', element: <ProtectedRoute><WaitingRoom /></ProtectedRoute> },
-        { path: 'rooms/:roomId/host-setup', element: <ProtectedRoute><HostSetup /></ProtectedRoute> },
-        { path: 'game/:sessionId', element: <ProtectedRoute><GameSessionPage /></ProtectedRoute> },
-        { path: 'game/:sessionId/review', element: <ProtectedRoute><HostReview /></ProtectedRoute> },
-        { path: 'game/:sessionId/round/:round/inference', element: <ProtectedRoute><InferenceResult /></ProtectedRoute> },
-        { path: 'game/:sessionId/events', element: <ProtectedRoute><EventProgress /></ProtectedRoute> },
-        { path: 'game/:sessionId/state', element: <ProtectedRoute><GameState /></ProtectedRoute> },
-        { path: 'game/history', element: <ProtectedRoute><GameHistory /></ProtectedRoute> },
-        { path: 'game/:sessionId/trade', element: <ProtectedRoute><Trade /></ProtectedRoute> },
-        { path: 'game/:sessionId/saves', element: <ProtectedRoute><GameSave /></ProtectedRoute> },
-        { path: 'game/:sessionId/tasks', element: <ProtectedRoute><Tasks /></ProtectedRoute> },
-        { path: 'game/:sessionId/decision-console', element: <ProtectedRoute><DecisionConsole /></ProtectedRoute> },
-        { path: 'user/strategies', element: <ProtectedRoute><StrategyAnalysis /></ProtectedRoute> },
-        { path: 'login', element: <Login /> },
-        { path: 'register', element: <Register /> },
-        { path: 'test-websocket', element: <TestWebSocket /> },
-      ],
-    },
-  ],
+const router = createBrowserRouter([
   {
-    future: {
-      v7_startTransition: true,
-      v7_relativeSplatPath: true,
-    },
-  }
-);
+    path: '/',
+    element: <RootLayout />,
+    children: [
+      { index: true, element: <ProtectedRoute><Home /></ProtectedRoute> },
+      { path: 'rooms', element: <ProtectedRoute><Rooms /></ProtectedRoute> },
+      { path: 'rooms/:roomId/wait', element: <ProtectedRoute><WaitingRoom /></ProtectedRoute> },
+      { path: 'rooms/:roomId/host-setup', element: <ProtectedRoute><HostSetup /></ProtectedRoute> },
+      { path: 'game/:sessionId', element: <ProtectedRoute><GameSessionPage /></ProtectedRoute> },
+      { path: 'game/:sessionId/review', element: <ProtectedRoute><HostReview /></ProtectedRoute> },
+      { path: 'game/:sessionId/round/:round/inference', element: <ProtectedRoute><InferenceResult /></ProtectedRoute> },
+      { path: 'game/:sessionId/events', element: <ProtectedRoute><EventProgress /></ProtectedRoute> },
+      { path: 'game/:sessionId/state', element: <ProtectedRoute><GameState /></ProtectedRoute> },
+      { path: 'game/history', element: <ProtectedRoute><GameHistory /></ProtectedRoute> },
+      { path: 'game/:sessionId/trade', element: <ProtectedRoute><Trade /></ProtectedRoute> },
+      { path: 'game/:sessionId/saves', element: <ProtectedRoute><GameSave /></ProtectedRoute> },
+      { path: 'game/:sessionId/tasks', element: <ProtectedRoute><Tasks /></ProtectedRoute> },
+      { path: 'game/:sessionId/decision-console', element: <ProtectedRoute><DecisionConsole /></ProtectedRoute> },
+      { path: 'user/strategies', element: <ProtectedRoute><StrategyAnalysis /></ProtectedRoute> },
+      { path: 'login', element: <Login /> },
+      { path: 'register', element: <Register /> },
+      { path: 'test-websocket', element: <TestWebSocket /> },
+    ],
+  },
+]);
 
 function App() {
   useClickExplosion();

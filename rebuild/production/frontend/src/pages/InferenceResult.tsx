@@ -25,16 +25,22 @@ const mockTurnResult: TurnResultDTO = {
   events: [
     {
       keyword: '激进扩张',
+      type: 'negative',
+      description: '激进扩张导致现金流吃紧',
       resource: 'cash',
       newValue: 600,
     },
     {
       keyword: '流动性恐慌',
+      type: 'negative',
+      description: '竞争对手流动性恐慌',
       resource: 'cash',
       newValue: 300,
     },
     {
       keyword: '价格战',
+      type: 'neutral',
+      description: '价格战影响品牌声誉',
       resource: 'reputation',
       newValue: 40,
     },
@@ -53,6 +59,7 @@ const mockTurnResult: TurnResultDTO = {
       marketShare: 32,
       reputation: 68,
       innovation: 55,
+      attributes: { '市场份额': 32, '品牌声誉': 68, '创新能力': 55 },
       passiveIncome: 120,
       passiveExpense: 80,
       delta: {
@@ -69,6 +76,7 @@ const mockTurnResult: TurnResultDTO = {
       marketShare: 28,
       reputation: 52,
       innovation: 47,
+      attributes: { '市场份额': 28, '品牌声誉': 52, '创新能力': 47 },
       passiveIncome: 90,
       passiveExpense: 70,
       delta: {
@@ -422,13 +430,16 @@ function InferenceResultPage() {
    */
   const handleEventTriggered = (eventItem: TurnResultDTO['events'][number]) => {
     // 更新资产数值（数值突变）
-    setAssets(prev => ({
-      ...prev,
-      [eventItem.resource]: eventItem.newValue,
-    }));
+    const resourceKey = eventItem.resource || eventItem.affectedResource;
+    if (resourceKey && eventItem.newValue !== undefined) {
+      setAssets(prev => ({
+        ...prev,
+        [resourceKey]: eventItem.newValue as number,
+      }));
 
-    // 标记当前正在突变的资源，用于抖动和变红动画
-    setMutatingResource(eventItem.resource);
+      // 标记当前正在突变的资源，用于抖动和变红动画
+      setMutatingResource(resourceKey);
+    }
 
     // 短暂的全屏白闪效果
     setFlashActive(true);
@@ -609,19 +620,25 @@ function InferenceResultPage() {
                   <span className="mt-[2px] text-rose-400 font-mono text-[10px] uppercase tracking-widest">
                     Risk
                   </span>
-                  <p className="leading-snug">{turnResult.riskCard}</p>
+                  <p className="leading-snug">
+                    {typeof turnResult.riskCard === 'string' ? turnResult.riskCard : turnResult.riskCard?.summary}
+                  </p>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="mt-[2px] text-emerald-400 font-mono text-[10px] uppercase tracking-widest">
                     Opportunity
                   </span>
-                  <p className="leading-snug">{turnResult.opportunityCard}</p>
+                  <p className="leading-snug">
+                    {typeof turnResult.opportunityCard === 'string' ? turnResult.opportunityCard : turnResult.opportunityCard?.summary}
+                  </p>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="mt-[2px] text-sky-400 font-mono text-[10px] uppercase tracking-widest">
                     Benefit
                   </span>
-                  <p className="leading-snug">{turnResult.benefitCard}</p>
+                  <p className="leading-snug">
+                    {typeof turnResult.benefitCard === 'string' ? turnResult.benefitCard : turnResult.benefitCard?.summary}
+                  </p>
                 </div>
               </div>
             </GlassCard>

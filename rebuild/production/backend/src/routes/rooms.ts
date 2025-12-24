@@ -536,13 +536,16 @@ router.post('/:roomId/kill-game', authenticateToken, async (req: AuthRequest, re
  * POST /api/rooms/:roomId/reset-game
  * 重置房间：清空该房间的游戏会话及相关数据（仅房主可操作）
  */
-router.post('/:roomId/reset-game', authenticateToken, async (req: AuthRequest, res, next) => {
+router.post('/:roomId/reset-game', authenticateToken, async (req: AuthRequest, res, next): Promise<void> => {
   try {
     const userId = req.userId;
-    if (!userId) throw new AppError('Unauthorized', 401);
+    if (!userId) {
+      throw new AppError('Unauthorized', 401);
+    }
     const { roomId } = req.params;
 
-    const room = await ensureRoomHost(roomId, userId);
+    // 验证房主权限
+    await ensureRoomHost(roomId, userId);
 
     // 查找当前会话
     const session = await prisma.gameSession.findUnique({
@@ -569,7 +572,8 @@ router.post('/:roomId/reset-game', authenticateToken, async (req: AuthRequest, r
         status: 'waiting',
       });
 
-      return res.json({ code: 200, message: '房间已重置', data: { room_id: roomId, status: 'waiting' } });
+      res.json({ code: 200, message: '房间已重置', data: { room_id: roomId, status: 'waiting' } });
+      return;
     }
 
     const sessionId = session.id;

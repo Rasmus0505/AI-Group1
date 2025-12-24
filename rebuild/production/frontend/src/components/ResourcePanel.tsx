@@ -110,7 +110,7 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({ playerAttributes = {}, op
     );
   };
 
-  const confidenceLabel = (level: OpponentIntel['confidence']) => {
+  const confidenceLabel = (level: 'low' | 'medium' | 'high') => {
     if (level === 'high') return 'High confidence';
     if (level === 'medium') return 'Medium confidence';
     return 'Low confidence';

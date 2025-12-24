@@ -37,10 +37,13 @@ export const authAPI = {
     return response.data;
   },
 
-
   refreshToken: async (): Promise<{ token: string }> => {
     const response = await apiClient.post('/auth/refresh');
     return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string): Promise<void> => {
+    await apiClient.post('/auth/reset-password', { token, newPassword });
   },
 };
 

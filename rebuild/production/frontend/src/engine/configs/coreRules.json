@@ -1,0 +1,74 @@
+{
+  "$schema": "./coreRules.schema.json",
+  "version": "1.0.0",
+  "description": "《凡墙皆是门》核心规则配置 - 不可违背的物理定律",
+  
+  "bankruptcyThreshold": 0,
+  "turnDuration": 180,
+  "maxEntities": 6,
+  "monthsPerTurn": 6,
+  
+  "decisionPrinciples": [
+    "玩家指令绝对优先，未收到指令的主体仅更新被动收支",
+    "不允许AI代替玩家主动发起主体行为",
+    "不允许系统撮合主体间合作事项",
+    "禁止明显扰乱游戏公平性的决策输入",
+    "选项生成保持中立性，AI不预设剧情走向"
+  ],
+  
+  "prohibitions": [
+    "系统不得代替玩家进行主体决策",
+    "系统不得自动发起玩家行为",
+    "系统不得预设剧情走向",
+    "系统不得撮合主体间合作",
+    "系统不得违背现金流原则"
+  ],
+  
+  "turnFlow": {
+    "phases": [
+      {
+        "name": "settlement",
+        "description": "结算被动收支",
+        "order": 1
+      },
+      {
+        "name": "decision",
+        "description": "玩家输入决策",
+        "order": 2
+      },
+      {
+        "name": "inference",
+        "description": "AI推演",
+        "order": 3
+      },
+      {
+        "name": "review",
+        "description": "主持人评审",
+        "order": 4
+      },
+      {
+        "name": "publish",
+        "description": "发布结果",
+        "order": 5
+      }
+    ]
+  },
+  
+  "bankruptcyRules": {
+    "cashFlowPrinciple": "现金余额不足以支付必要支出（被动支出+决策支出）视为现金流断裂",
+    "decisionRightPrinciple": "因外部事件或内部崩溃无法继续经营，判定丧失决策权",
+    "consequences": [
+      "停止该主体游戏资格",
+      "资产清算（如有）",
+      "排行榜标记为破产"
+    ]
+  },
+  
+  "scoringDimensions": [
+    { "name": "现金资产", "weight": 0.3 },
+    { "name": "市场份额", "weight": 0.25 },
+    { "name": "品牌声誉", "weight": 0.2 },
+    { "name": "创新能力", "weight": 0.15 },
+    { "name": "风险控制", "weight": 0.1 }
+  ]
+}
