@@ -1,10 +1,9 @@
 import React from 'react';
-import { Shield, Sword, Eye, Trophy, Coins, Zap } from 'lucide-react';
+import { Coins, Zap, Trophy } from 'lucide-react';
+import { Progress } from 'antd';
 
 interface ResourcePanelProps {
-  /** 玩家属性对象（动态，从 gameState.players[me].attributes 读取） */
   playerAttributes?: Record<string, number | string>;
-  /** 对手情报（可选，用于高级视图） */
   opponents?: Array<{
     id: string;
     name: string;
@@ -14,109 +13,31 @@ interface ResourcePanelProps {
   }>;
 }
 
-/**
- * ResourcePanel - 数据驱动的资源面板
- * - 动态读取 gameState.players[me].attributes 对象
- * - 核心固定属性："金钱（元）"
- * - 其他属性（如"原材料"、"影响力"等）由 AI 推演动态添加
- * - 对手情报显示（可选，用于高级视图）
- */
 const ResourcePanel: React.FC<ResourcePanelProps> = ({ playerAttributes = {}, opponents = [] }) => {
-  // 资源图标映射（根据属性名自动选择图标）
   const getResourceIcon = (key: string): React.ReactNode => {
-    const iconMap: Record<string, React.ReactNode> = {
-      '金钱': <Coins size={14} className="text-yellow-400" />,
-      'money': <Coins size={14} className="text-yellow-400" />,
-      '元': <Coins size={14} className="text-yellow-400" />,
-      '能量': <Zap size={14} className="text-blue-400" />,
-      'energy': <Zap size={14} className="text-blue-400" />,
-      'force': <Sword size={14} className="text-red-400" />,
-      'influence': <Shield size={14} className="text-sky-400" />,
-      'intelLevel': <Eye size={14} className="text-emerald-400" />,
-    };
-    
-    // 尝试匹配（支持中英文）
-    const lowerKey = key.toLowerCase();
-    for (const [mapKey, icon] of Object.entries(iconMap)) {
-      if (lowerKey.includes(mapKey.toLowerCase()) || key.includes(mapKey)) {
-        return icon;
-      }
-    }
-    
-    // 默认图标
-    return <Trophy size={14} className="text-slate-400" />;
-  };
-
-  // 资源颜色映射
-  const getResourceColor = (key: string): string => {
-    const colorMap: Record<string, string> = {
-      '金钱': 'bg-yellow-500',
-      'money': 'bg-yellow-500',
-      '元': 'bg-yellow-500',
-      '能量': 'bg-blue-500',
-      'energy': 'bg-blue-500',
-      'force': 'bg-red-500',
-      'influence': 'bg-sky-500',
-      'intelLevel': 'bg-emerald-500',
-    };
-    
-    const lowerKey = key.toLowerCase();
-    for (const [mapKey, color] of Object.entries(colorMap)) {
-      if (lowerKey.includes(mapKey.toLowerCase()) || key.includes(mapKey)) {
-        return color;
-      }
-    }
-    
-    return 'bg-indigo-500'; // 默认颜色
-  };
-
-  // 计算最大值（用于进度条）
-  const getMaxValue = (key: string, value: number): number => {
-    // 如果是百分比类型（0-100），返回100
-    if (key.includes('level') || key.includes('Level') || key.includes('等级')) {
-      return 100;
-    }
-    // 如果是金额类型，使用合理的最大值
     if (key.includes('金钱') || key.includes('money') || key.includes('元')) {
-      return Math.max(10000, value * 2); // 至少10000，或当前值的2倍
+      return <Coins size={14} style={{ color: '#f59e0b' }} />;
     }
-    // 默认返回当前值的2倍或100，取较大值
+    if (key.includes('能量') || key.includes('energy')) {
+      return <Zap size={14} style={{ color: '#3b82f6' }} />;
+    }
+    return <Trophy size={14} style={{ color: '#6366f1' }} />;
+  };
+
+  const getResourceColor = (key: string): string => {
+    if (key.includes('金钱') || key.includes('money') || key.includes('元')) return '#f59e0b';
+    if (key.includes('能量') || key.includes('energy')) return '#3b82f6';
+    return '#6366f1';
+  };
+
+  const getMaxValue = (key: string, value: number): number => {
+    if (key.includes('level') || key.includes('Level') || key.includes('等级')) return 100;
+    if (key.includes('金钱') || key.includes('money') || key.includes('元')) {
+      return Math.max(10000, value * 2);
+    }
     return Math.max(100, value * 2);
   };
 
-  const renderBar = (label: string, value: number | string, icon: React.ReactNode, color: string) => {
-    const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value;
-    const max = getMaxValue(label, numValue);
-    const percent = Math.max(0, Math.min(100, (numValue / max) * 100));
-    
-    return (
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1 text-xs text-slate-400">
-          <span className="flex items-center gap-1">
-            {icon}
-            {label}
-          </span>
-          <span className="font-mono text-slate-100">
-            {typeof value === 'string' ? value : numValue.toLocaleString()}
-          </span>
-        </div>
-        <div className="h-1.5 w-full bg-slate-900 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${color} transition-all`}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      </div>
-    );
-  };
-
-  const confidenceLabel = (level: 'low' | 'medium' | 'high') => {
-    if (level === 'high') return 'High confidence';
-    if (level === 'medium') return 'Medium confidence';
-    return 'Low confidence';
-  };
-
-  // 优先显示"金钱"（核心固定属性）
   const sortedAttributes = Object.entries(playerAttributes).sort(([keyA], [keyB]) => {
     const moneyKeywords = ['金钱', 'money', '元'];
     const aIsMoney = moneyKeywords.some(k => keyA.includes(k));
@@ -126,61 +47,73 @@ const ResourcePanel: React.FC<ResourcePanelProps> = ({ playerAttributes = {}, op
     return 0;
   });
 
+  const confidenceLabel = (level: 'low' | 'medium' | 'high') => {
+    if (level === 'high') return '高置信度';
+    if (level === 'medium') return '中置信度';
+    return '低置信度';
+  };
+
   return (
-    <aside className="h-full flex flex-col bg-[#0b0b0d] border border-slate-800 rounded-2xl px-4 py-4 gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
-        <div className="text-xs text-slate-400 uppercase tracking-[0.25em] mb-2">
+        <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
           资源与属性
         </div>
         {sortedAttributes.length > 0 ? (
-          sortedAttributes.map(([key, value]) => {
-            const icon = getResourceIcon(key);
-            const color = getResourceColor(key);
-            return renderBar(key, value, icon, color);
-          })
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {sortedAttributes.map(([key, value]) => {
+              const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value;
+              const max = getMaxValue(key, numValue);
+              const percent = Math.max(0, Math.min(100, (numValue / max) * 100));
+              const color = getResourceColor(key);
+              const icon = getResourceIcon(key);
+
+              return (
+                <div key={key} style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#374151' }}>
+                      {icon} {key}
+                    </span>
+                    <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                      {typeof value === 'string' ? value : numValue.toLocaleString()}
+                    </span>
+                  </div>
+                  <Progress percent={percent} size="small" strokeColor={color} showInfo={false} />
+                </div>
+              );
+            })}
+          </div>
         ) : (
-          <div className="text-xs text-slate-500 py-4 text-center">
+          <div style={{ fontSize: 13, color: '#94a3b8', padding: '16px 0', textAlign: 'center' }}>
             暂无资源数据
           </div>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col mt-2">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-slate-300 flex items-center gap-1">
-            <Eye size={14} className="text-slate-400" />
-            Opponent intel
-          </span>
-          <span className="text-[10px] text-slate-500 uppercase tracking-widest">Partial</span>
-        </div>
-        <div className="space-y-2 text-xs overflow-y-auto">
-          {opponents.map(o => (
-            <div
-              key={o.id}
-              className="rounded-xl bg-slate-900/80 border border-slate-800 px-3 py-2 flex flex-col"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-slate-200 font-medium">{o.name}</span>
-                <span className="text-[10px] text-slate-500">{confidenceLabel(o.confidence)}</span>
+      {opponents.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+            对手情报
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {opponents.map(o => (
+              <div key={o.id} style={{ padding: '8px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 500, color: '#0f172a' }}>{o.name}</span>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>{confidenceLabel(o.confidence)}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  财富范围: <span style={{ fontFamily: 'monospace', color: '#374151' }}>
+                    ${o.moneyMin.toLocaleString()} - ${o.moneyMax.toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div className="text-[11px] text-slate-400">
-                <span className="mr-1">Money window:</span>
-                {/* 模糊呈现的范围文本，实现“非完全信息”遮蔽效果 */}
-                <span className="font-mono text-slate-300 blur-sm hover:blur-none transition">
-                  ${o.moneyMin.toLocaleString()} - ${o.moneyMax.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          ))}
-          {opponents.length === 0 && (
-            <div className="text-[11px] text-slate-500">No intel collected yet.</div>
-          )}
+            ))}
+          </div>
         </div>
-      </div>
-    </aside>
+      )}
+    </div>
   );
 };
 
 export default ResourcePanel;
-
-

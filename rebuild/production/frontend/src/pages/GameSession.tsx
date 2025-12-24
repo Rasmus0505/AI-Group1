@@ -537,64 +537,70 @@ function GameSessionPage() {
     `;
 
     return (
-      <div className="min-h-screen bg-[#050507] text-slate-100 px-6 py-6">
-        <div className="max-w-6xl mx-auto h-screen max-h-[900px] flex flex-col gap-4">
-          <header className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-[0.35em] text-slate-400">
-                高级视图控制台
-              </span>
-              <h1 className="mt-1 text-lg font-semibold text-slate-100">
-                游戏会话 {sessionId?.slice(-8)} - 第{session.currentRound}回合
-              </h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-700/50 px-3 py-1 rounded">
-                <span className="font-mono">回合 {session.currentRound}</span>
-                <span className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
-                <span className="capitalize">{session.roundStatus}</span>
+      <div className="game-shell" style={{ minHeight: '100vh', padding: '16px' }}>
+        <div className="game-container">
+          {/* 顶部状态栏 */}
+          <header className="status-bar">
+            <div className="status-group">
+              <div className="status-chip">
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>高级视图</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>第{session.currentRound}回合</span>
+                </div>
+                <Divider type="vertical" style={{ height: 32, borderColor: '#e2e8f0', marginRight: 12 }} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase' }}>阶段</span>
+                  <Tag color="cyan" style={{ margin: 0, textTransform: 'uppercase' }}>{session.roundStatus}</Tag>
+                </div>
               </div>
-              <Space>
-                <HelpButton size="small" type="default" />
-                <Button 
-                  size="small" 
-                  onClick={() => setAdvancedView(false)}
-                  className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
-                >
-                  返回标准视图
-                </Button>
-                <Button 
-                  size="small" 
-                  onClick={() => navigate('/rooms')}
-                  className="bg-red-700 border-red-600 text-red-100 hover:bg-red-600"
-                >
-                  退出房间
-                </Button>
-              </Space>
+            </div>
+            <div className="status-group">
+              <HelpButton size="small" type="default" />
+              <Button size="small" onClick={() => setAdvancedView(false)}>
+                返回标准视图
+              </Button>
+              <Button size="small" danger onClick={() => navigate('/rooms')}>
+                退出房间
+              </Button>
             </div>
           </header>
 
-          <main className="flex-1 flex flex-col gap-3">
-            <div className="flex-1 grid grid-cols-12 gap-3">
-              <div className="col-span-3 flex flex-col gap-2">
-                <ResourcePanel
-                  playerAttributes={playerAttributes}
-                  opponents={[]}
-                />
-                <OpponentIntel
-                  opponents={opponentsIntel}
-                  onOpenPrivateChannel={id => {
-                    // TODO: 在后续版本中接入右侧 ChatSystem 的私聊频道
-                    message.info(`准备对 ${id} 发起私聊（占位逻辑）`);
-                  }}
-                  onProbeIntel={id => {
-                    // TODO: 将来可以接入“情报刺探”动作（例如调用后端 trade/intel 接口）
-                    message.info(`准备对 ${id} 发起情报刺探（占位逻辑）`);
-                  }}
-                />
+          {/* 主内容区 */}
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            {/* 左侧栏 - 资源与情报 */}
+            <Col span={6}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <GlassCard className="card-panel">
+                  <div className="card-header-line">
+                    <div className="card-title-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Users size={16} /> 资源面板
+                    </div>
+                  </div>
+                  <ResourcePanel playerAttributes={playerAttributes} opponents={[]} />
+                </GlassCard>
+                <GlassCard className="card-panel">
+                  <div className="card-header-line">
+                    <div className="card-title-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Target size={16} /> 对手情报
+                    </div>
+                  </div>
+                  <OpponentIntel
+                    opponents={opponentsIntel}
+                    onOpenPrivateChannel={id => message.info(`准备对 ${id} 发起私聊`)}
+                    onProbeIntel={id => message.info(`准备对 ${id} 发起情报刺探`)}
+                  />
+                </GlassCard>
               </div>
+            </Col>
 
-              <div className="col-span-6">
+            {/* 中间栏 - 叙事内容 */}
+            <Col span={12}>
+              <GlassCard className="card-panel">
+                <div className="card-header-line">
+                  <div className="card-title-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Activity size={16} /> 叙事内容
+                  </div>
+                </div>
                 <NarrativeFeed
                   phase={advancedPhase}
                   fullText={narrativeText}
@@ -602,18 +608,27 @@ function GameSessionPage() {
                   remainingSeconds={remainingSecondsNumeric}
                   onShareSnippet={setAdvancedSharedSnippet}
                 />
-              </div>
+              </GlassCard>
+            </Col>
 
-              <div className="col-span-3">
+            {/* 右侧栏 - 聊天系统 */}
+            <Col span={6}>
+              <GlassCard className="card-panel">
+                <div className="card-header-line">
+                  <div className="card-title-sm" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <MessageSquare size={16} /> 通讯中心
+                  </div>
+                </div>
                 <ChatSystem lastSharedSnippet={advancedSharedSnippet} />
-              </div>
-            </div>
+              </GlassCard>
+            </Col>
+          </Row>
 
-            <div className="text-[11px] text-slate-500 text-center mt-1">
-              此视图为高级信息控制台，当前版本仅用于辅助阅读与观战。
-              <span className="ml-1">请在标准界面中完成正式决策提交与确认。</span>
-            </div>
-          </main>
+          {/* 底部提示 */}
+          <div style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 12 }}>
+            此视图为高级信息控制台，当前版本仅用于辅助阅读与观战。
+            <span style={{ marginLeft: 4 }}>请在标准界面中完成正式决策提交与确认。</span>
+          </div>
         </div>
       </div>
     );
