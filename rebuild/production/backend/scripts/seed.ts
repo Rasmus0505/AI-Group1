@@ -162,7 +162,8 @@ async function main() {
                 }
               ],
               temperature: 0.7,
-              max_tokens: 2000
+              max_tokens: 2000,
+              stream: true
             },
             gameRules: `# 末日生存：废土之王\n\n**背景**：2050年，资源枯竭。\n**规则**：\n1. 每回合提交一项决策。\n2. 决策影响生命值、食物和金钱。\n3. 支持玩家间交易。`,
             totalDecisionEntities: 4,

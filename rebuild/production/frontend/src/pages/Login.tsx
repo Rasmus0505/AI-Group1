@@ -69,7 +69,7 @@ function Login() {
           </Paragraph>
 
           <Space wrap size="middle">
-            <Link to="/rooms" className="btn-strong">
+            <Link to="/rooms" className="btn-strong glow">
               进入房间列表
             </Link>
             <Link to="/rooms" className="btn-ghost">

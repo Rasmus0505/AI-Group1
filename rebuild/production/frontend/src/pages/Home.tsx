@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import UserRegistryPanel from '../components/UserRegistryPanel';
 import OnlineRoomsPanel from '../components/OnlineRoomsPanel';
+import ParticleNetwork from '../components/ParticleNetwork';
 import { useAuthStore } from '../stores/authStore';
 
 const { Title, Paragraph, Text } = Typography;
@@ -26,6 +27,12 @@ function Home() {
 
   return (
     <div className="home-shell">
+      <ParticleNetwork 
+        themeColor="16, 185, 129"
+        particleCount={80}
+        connectDistance={150}
+        slowFactor={0.15}
+      />
       <div className="grid-lines" />
       <div className="home-content">
         <header className="home-topbar">
@@ -76,8 +83,15 @@ function Home() {
                   <span>快速入口</span>
                 </div>
                 <p className="side-desc">直接浏览房间列表，随时加入或创建新的战局。</p>
-                <Link to="/rooms" className="btn-strong slim">
-                  开始匹配 <ArrowRightOutlined />
+                <Link to="/rooms" className="quick-entry-glow">
+                  <Button
+                    type="primary"
+                    size="large"
+                    className="quick-entry-btn"
+                    icon={<ArrowRightOutlined />}
+                  >
+                    开始匹配
+                  </Button>
                 </Link>
               </div>
               <div className="side-card soft-green">

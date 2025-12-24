@@ -8,6 +8,7 @@ export interface GameSessionSummary {
   roundStatus: string;
   decisionDeadline?: string | null;
   status: string;
+  gameRules?: string | null; // 游戏规则（蓝本）
 }
 
 export interface DecisionSummary {
@@ -110,6 +111,31 @@ export const gameAPI = {
     };
   },
 
+  getActiveSessionByRoom: async (roomId: string): Promise<GameSessionSummary> => {
+    const response = (await apiClient.get(
+      `/game/by-room/${roomId}/active-session`
+    )) as any;
+    if (response?.code === 200 && response.data) {
+      const data = response.data as {
+        sessionId: string;
+        roomId: string;
+        currentRound: number;
+        roundStatus: string;
+        decisionDeadline?: string | null;
+        status: string;
+      };
+      return {
+        sessionId: data.sessionId,
+        roomId: data.roomId,
+        currentRound: data.currentRound,
+        roundStatus: data.roundStatus,
+        decisionDeadline: data.decisionDeadline,
+        status: data.status,
+      };
+    }
+    throw new Error(response?.message || '获取正在进行的对局失败');
+  },
+
   getSession: async (sessionId: string): Promise<GameSessionSummary> => {
     const response = await apiClient.get(`/game/${sessionId}`);
     // apiClient interceptor returns response.data, so response is { code, message, data: {...} }
@@ -142,6 +168,25 @@ export const gameAPI = {
       return response.data as RoundDecisions;
     }
     throw new Error(response?.message || '获取决策列表失败');
+  },
+
+  getDecisionOptions: async (sessionId: string, round: number): Promise<{
+    round: number;
+    options: Array<{
+      option_id: string;
+      text: string;
+      expected_effect: string;
+      category: string;
+    }>;
+    generatedAt: string;
+  }> => {
+    const response = (await apiClient.get(
+      `/game/${sessionId}/round/${round}/decision-options`
+    )) as any;
+    if (response?.code === 200 && response.data) {
+      return response.data;
+    }
+    throw new Error(response?.message || '获取决策选项失败');
   },
 
   // 第七阶段：主持人审核功能
@@ -220,6 +265,7 @@ export const gameAPI = {
         description: string;
       }>;
       nextRoundHints?: string;
+      uiTurnResult?: import('../types/turnResult').TurnResultDTO;
     };
     completedAt?: string;
     error?: string;
