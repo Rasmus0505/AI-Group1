@@ -32,15 +32,46 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) throw new AppError('房间不存在', 404);
 
+  // Default DeepSeek configuration tuned for "Every Wall is a Door"
+  const defaultBodyTemplate = {
+    model: 'deepseek-chat',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You are the narrative and rules engine for a multiplayer business simulation game called "Every Wall is a Door" (凡墙皆是门). ' +
+          'The game has multiple entities (A, B, C, D...), each representing a company with a Chinese name. ' +
+          'Time is advanced in quarterly rounds (each round ≈ one quarter, four rounds ≈ one year). In each round: ' +
+          'players submit text decisions for their entities; you update each entity state (cash balance, passive income, passive expense, market share, reputation, innovation, etc.) ' +
+          'STRICTLY following the rules: player decisions FIRST (if an entity gives no decision this round, only apply passive income/expense and ongoing events, NEVER invent proactive actions), ' +
+          'cross-entity effects must be considered (one entity decision can affect others and the market), ' +
+          'you classify events as positive / negative / neutral and allow multi-round events, ' +
+          'you are inspired by an underlying I-Ching hexagram for randomness and narrative flavor but you must keep business logic realistic, ' +
+          'you MUST NOT initiate cooperation between entities on your own and MUST NOT replace players decisions. ' +
+          'At the end of each round you MUST produce: (1) a coherent narrative, (2) a structured per-entity panel with updated attributes and deltas, ' +
+          '(3) a leaderboard with scores (e.g. profit, market share), (4) three short cards for risk, opportunity and current benefit, and (5) a list of achievements for key decisions.'
+      },
+      {
+        role: 'user',
+        content: '{{prompt}}'
+      }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000,
+    stream: false
+  };
+
   return prisma.hostConfig.create({
     data: {
       roomId,
       createdBy: userId,
       apiConfig: {},
-      apiProvider: null,
-      apiEndpoint: null,
-      apiHeaders: {},
-      apiBodyTemplate: {},
+      apiProvider: 'deepseek',
+      apiEndpoint: 'https://api.deepseek.com/v1/chat/completions',
+      apiHeaders: {
+        'Content-Type': 'application/json'
+      },
+      apiBodyTemplate: defaultBodyTemplate,
       totalDecisionEntities: room.maxPlayers,
       humanPlayerCount: Math.max(room.currentPlayers, 1),
       aiPlayerCount: 0,
@@ -239,28 +270,33 @@ router.post('/:roomId/join', authenticateToken, async (req: AuthRequest, res, ne
     const room = await prisma.room.findUnique({ where: { id: roomId } });
     if (!room) throw new AppError('房间不存在', 404);
 
-    // 问题1修复：playing状态的房间不允许加入
+    // 检查玩家是否之前参与过该房间
+    const existing = await prisma.roomPlayer.findFirst({
+      where: { roomId, userId },
+    });
+
+    // 如果用户已经在房间中（未离开），直接返回成功
+    if (existing && existing.status !== 'left') {
+      res.json({ code: 200, message: '已在房间中' });
+      return;
+    }
+
+    // 修复：playing状态的房间，只允许之前参与过的玩家重新加入
     if (room.status === 'playing') {
-      throw new AppError('游戏进行中的房间不允许加入', 403);
+      if (!existing) {
+        // 新玩家不允许加入进行中的房间
+        throw new AppError('游戏进行中的房间不允许新玩家加入', 403);
+      }
+      // 之前参与过的玩家可以重新加入，继续下面的逻辑
     }
 
     if (room.password && room.password !== password) {
       throw new AppError('房间密码错误', 403);
     }
 
-    if (room.currentPlayers >= room.maxPlayers) {
+    // 检查房间是否已满（但如果是重新加入的玩家，不计入满员限制）
+    if (!existing && room.currentPlayers >= room.maxPlayers) {
       throw new AppError('房间已满员', 403);
-    }
-
-    const existing = await prisma.roomPlayer.findFirst({
-      where: { roomId, userId },
-    });
-
-    // If user is already in the room, return success without emitting event (idempotent operation)
-    if (existing && existing.status !== 'left') {
-      // User is already in room, just return success without emitting events
-      res.json({ code: 200, message: '已在房间中' });
-      return;
     }
 
     // User rejoining the room (was previously left) or new user

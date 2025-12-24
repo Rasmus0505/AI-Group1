@@ -7,6 +7,7 @@ import { useAuthStore } from '../stores/authStore';
 import RoomCard from '../components/RoomCard';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
+import { gameAPI } from '../services/game';
 
 function Rooms() {
   const { token, user } = useAuthStore();
@@ -195,6 +196,19 @@ function Rooms() {
     }
   };
 
+  const handleResume = async (roomId: string) => {
+    setActionRoomId(roomId);
+    try {
+      const session = await gameAPI.getActiveSessionByRoom(roomId);
+      message.success('已定位到进行中的对局，正在进入战场');
+      navigate(`/game/${session.sessionId}`);
+    } catch (err) {
+      message.error(getErrMsg(err, '无法继续游戏，当前房间可能没有进行中的对局'));
+    } finally {
+      setActionRoomId(null);
+    }
+  };
+
   return (
     <div className="rooms-shell">
       <div className="grid-lines" />
@@ -255,6 +269,7 @@ function Rooms() {
                   onLeave={handleLeave}
                   onClose={handleClose}
                   onKillGame={handleKillGame}
+                  onResume={handleResume}
                   isHost={room.hostId === user?.userId}
                   loading={actionRoomId === room.id || loading}
                 />

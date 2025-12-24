@@ -3,7 +3,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import prisma from '../utils/db';
 import { AppError } from '../middleware/errorHandler';
 import { io } from '../server';
-import { aiService, InferenceRequest } from '../services/aiService';
+import { aiService, InferenceRequest, AIConfig } from '../services/aiService';
 import redis from '../utils/redis';
 import { logger } from '../utils/logger';
 
@@ -131,6 +131,77 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
     next(error);
   }
 });
+
+/**
+ * GET /api/game/by-room/:roomId/active-session
+ * 根据房间ID获取当前进行中的游戏会话（用于“继续游戏”入口）
+ */
+router.get(
+  '/by-room/:roomId/active-session',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      if (!userId) throw new AppError('Unauthorized', 401);
+
+      const { roomId } = req.params;
+
+      const room = await prisma.room.findUnique({ where: { id: roomId } });
+      if (!room) {
+        throw new AppError('房间不存在', 404);
+      }
+
+      // 允许之前参与过游戏的玩家继续游戏（即使他们暂时离开了房间）
+      // 只要他们在 roomPlayer 表中有记录，就允许继续游戏
+      const membership = await prisma.roomPlayer.findFirst({
+        where: {
+          roomId,
+          userId,
+        },
+      });
+      if (!membership) {
+        throw new AppError('你当前不在该房间中，无法继续游戏', 403);
+      }
+      
+      // 如果玩家之前离开了房间，自动将其状态更新为 joined，允许重新参与
+      // 注意：这里只更新状态，不更新 currentPlayers，因为玩家应该通过 /api/rooms/:roomId/join 重新加入
+      // 但如果玩家直接访问游戏会话页面，我们也允许他们继续游戏
+      if (membership.status === 'left') {
+        await prisma.roomPlayer.update({
+          where: { id: membership.id },
+          data: { status: 'joined' },
+        });
+        // 同步更新房间人数（因为之前离开时已经减过了）
+        await prisma.room.update({
+          where: { id: roomId },
+          data: { currentPlayers: { increment: 1 } },
+        });
+      }
+
+      const session = await prisma.gameSession.findUnique({
+        where: { roomId },
+      });
+
+      if (!session || session.status !== 'playing') {
+        throw new AppError('当前房间没有正在进行的对局', 404);
+      }
+
+      res.json({
+        code: 200,
+        data: {
+          sessionId: session.id,
+          roomId: session.roomId,
+          currentRound: session.currentRound,
+          roundStatus: session.roundStatus,
+          decisionDeadline: session.decisionDeadline,
+          status: session.status,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * GET /api/game/history
@@ -530,6 +601,12 @@ router.get('/:sessionId', authenticateToken, async (req: AuthRequest, res, next)
     // 确认用户在房间中
     await ensureRoomMembership(session.roomId, userId);
 
+    // 获取游戏规则（从房间的 hostConfig）
+    const hostConfig = await prisma.hostConfig.findUnique({
+      where: { roomId: session.roomId },
+      select: { gameRules: true },
+    });
+
     res.json({
       code: 200,
       data: {
@@ -540,12 +617,159 @@ router.get('/:sessionId', authenticateToken, async (req: AuthRequest, res, next)
         roundStatus: session.roundStatus,
         decisionDeadline: session.decisionDeadline,
         status: session.status,
+        gameRules: hostConfig?.gameRules || null, // 添加游戏规则
       },
     });
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * GET /api/game/:sessionId/round/:round/decision-options
+ * 获取AI生成的决策选项
+ */
+router.get(
+  '/:sessionId/round/:round/decision-options',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { sessionId, round } = req.params;
+      const roundNum = parseInt(round, 10);
+
+      if (!userId) throw new AppError('Unauthorized', 401);
+      if (isNaN(roundNum) || roundNum < 1) {
+        throw new AppError('Invalid round number', 400);
+      }
+
+      // Verify session exists
+      const session = await prisma.gameSession.findUnique({
+        where: { id: sessionId },
+        include: {
+          room: {
+            include: {
+              hostConfig: true,
+            },
+          },
+        },
+      });
+
+      if (!session) throw new AppError('游戏会话不存在', 404);
+
+      // Verify user is in room
+      const membership = await ensureRoomMembership(session.roomId, userId);
+
+      // Verify session is in decision phase
+      if (session.roundStatus !== 'decision') {
+        throw new AppError('当前阶段不允许获取决策选项', 400);
+      }
+
+      // Get host config
+      const hostConfig = session.room.hostConfig;
+      if (!hostConfig || !hostConfig.apiEndpoint) {
+        throw new AppError('AI配置未完成，无法生成决策选项', 400);
+      }
+
+      // Get current user info
+      const currentUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          nickname: true,
+        },
+      });
+
+      // Get player's previous actions
+      const playerActions = await prisma.playerAction.findMany({
+        where: {
+          sessionId,
+          userId,
+          round: { lt: roundNum },
+        },
+        orderBy: { round: 'desc' },
+        take: 3,
+      });
+
+      // Get other players info
+      const roomPlayers = await prisma.roomPlayer.findMany({
+        where: {
+          roomId: session.roomId,
+          status: { not: 'left' },
+          userId: { not: userId },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              nickname: true,
+            },
+          },
+        },
+      });
+
+      // Get active events
+      const activeEvents = await prisma.temporaryEvent.findMany({
+        where: {
+          sessionId,
+          round: { lte: roundNum },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Get game state
+      const gameState = session.gameState as Record<string, unknown> | null;
+
+      // Prepare AI config
+      const aiConfig: AIConfig = {
+        provider: hostConfig.apiProvider || null,
+        endpoint: hostConfig.apiEndpoint || null,
+        headers: (hostConfig.apiHeaders as Record<string, unknown>) || null,
+        bodyTemplate: (hostConfig.apiBodyTemplate as Record<string, unknown>) || null,
+      };
+
+      // Generate options
+      const options = await aiService.generateDecisionOptions(
+        aiConfig,
+        hostConfig.gameRules || '',
+        gameState,
+        {
+          playerIndex: membership.playerIndex || 0,
+          username: currentUser?.username || req.username || 'Unknown',
+          nickname: currentUser?.nickname || undefined,
+          recentDecisions: playerActions.map(action => ({
+            round: action.round,
+            actionText: action.actionText || undefined,
+          })),
+        },
+        roomPlayers.map(rp => ({
+          playerIndex: rp.playerIndex || 0,
+          username: rp.user.username,
+          resources: undefined, // Can be extended with actual resource data
+          attributes: undefined, // Can be extended with actual attribute data
+        })),
+        activeEvents.map(event => ({
+          eventType: event.eventType,
+          eventContent: event.eventContent,
+          effectiveRounds: event.effectiveRounds,
+        }))
+      );
+
+      res.json({
+        code: 200,
+        data: {
+          round: roundNum,
+          options: options,
+          generatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * POST /api/game/:sessionId/decision
@@ -1383,6 +1607,14 @@ async function performInferenceAsync(
       eventsCount: result.events?.length || 0,
     });
 
+    // 将 AI 原始结果转换为前端 TurnResultDTO（最小可用版本）。
+    const uiTurnResult = buildTurnResultDTO(result as any, inferenceData);
+
+    const enhancedResult: any = {
+      ...(result as any),
+      uiTurnResult,
+    };
+
     // 发送推演进度更新
     io.to(roomId).emit('inference_progress', {
       sessionId,
@@ -1396,7 +1628,7 @@ async function performInferenceAsync(
     const resultData = {
       sessionId,
       round,
-      result,
+      result: enhancedResult,
       status: 'completed',
       completedAt: new Date().toISOString(),
     };
@@ -1407,7 +1639,7 @@ async function performInferenceAsync(
       where: { id: sessionId },
       data: {
         roundStatus: 'result',
-        gameState: result as any, // 保存推演结果到gameState
+        gameState: enhancedResult as any, // 保存推演结果到gameState
       },
       include: {
         room: {
@@ -1571,6 +1803,207 @@ async function performInferenceAsync(
 
     throw error;
   }
+}
+
+/**
+ * 将 AI 返回的原始结构结果转换为前端 TurnResultDTO 兼容格式。
+ * 这里用最小可用逻辑：当 Python NarrativeEngine 直接返回 TurnResultDTO 时原样透传；
+ * 当仍是旧结构（narrative/outcomes/events）时，尽力映射核心字段。
+ */
+function buildTurnResultDTO(
+  result: any,
+  inferenceData: InferenceRequest
+): {
+  narrative: string;
+  events: Array<{
+    keyword: string;
+    resource: string;
+    newValue: number;
+    type?: string;
+    description?: string;
+  }>;
+  redactedSegments?: Array<{ start: number; end: number; reason?: string }>;
+  perEntityPanel: Array<{
+    id: string;
+    name: string;
+    cash: number;
+    marketShare?: number;
+    reputation?: number;
+    innovation?: number;
+    passiveIncome: number;
+    passiveExpense: number;
+    delta: Record<string, number>;
+    broken: boolean;
+    achievementsUnlocked: string[];
+  }>;
+  leaderboard: Array<{
+    id: string;
+    name: string;
+    score: number;
+    rank: number;
+    rankChange?: number;
+  }>;
+  riskCard: string;
+  opportunityCard: string;
+  benefitCard: string;
+  achievements: Array<{
+    id: string;
+    entityId: string;
+    title: string;
+    description: string;
+  }>;
+  hexagram?: {
+    name: string;
+    omen: string;
+    lines: Array<'yang' | 'yin'>;
+    text: string;
+    colorHint?: string;
+  };
+  options?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    expectedDelta?: Record<string, number>;
+  }>;
+  ledger?: {
+    startingCash: number;
+    passiveIncome: number;
+    passiveExpense: number;
+    decisionCost: number;
+    balance: number;
+  };
+  branchingNarratives?: string[];
+  nextRoundHints?: string;
+} {
+  // 如果已经是符合契约的结构，直接返回
+  if (result && result.narrative && Array.isArray(result.perEntityPanel)) {
+    return {
+      narrative: result.narrative,
+      events: result.events || [],
+      redactedSegments: result.redactedSegments || [],
+      perEntityPanel: result.perEntityPanel || [],
+      leaderboard: result.leaderboard || [],
+      riskCard: result.riskCard || '',
+      opportunityCard: result.opportunityCard || '',
+      benefitCard: result.benefitCard || '',
+      achievements: result.achievements || [],
+      hexagram: result.hexagram,
+      options: result.options,
+      ledger: result.ledger,
+      branchingNarratives: result.branchingNarratives,
+      nextRoundHints: result.nextRoundHints || '',
+    };
+  }
+
+  const narrative = result?.narrative || '';
+
+  // 事件映射：尽量从旧结构提取 keyword/resource/newValue
+  const eventsRaw = Array.isArray(result?.events) ? result.events : [];
+  const events = eventsRaw
+    .map((ev: any, idx: number) => {
+      const keyword =
+        ev.keyword ||
+        ev.trigger_keyword ||
+        ev.description ||
+        ev.type ||
+        `event_${idx + 1}`;
+      const resource = ev.resource || 'cash';
+      const newValue =
+        typeof ev.newValue === 'number'
+          ? ev.newValue
+          : typeof ev.value === 'number'
+          ? ev.value
+          : typeof ev.delta === 'number'
+          ? ev.delta
+          : 0;
+      return {
+        keyword: String(keyword),
+        resource: String(resource),
+        newValue,
+        type: ev.type || 'mutation',
+        description: ev.description || '',
+      };
+    })
+    .slice(0, 10);
+
+  // 主体面板映射：从 outcomes/resources 补齐现金等核心字段
+  const outcomesRaw = Array.isArray(result?.outcomes) ? result.outcomes : [];
+  const perEntityPanel = outcomesRaw.map((o: any) => {
+    const playerIndex = o.playerIndex ?? o.player_id ?? o.id ?? 'P';
+    const decision = inferenceData.decisions?.find(
+      d => d.playerIndex === o.playerIndex
+    );
+    const name =
+      decision?.nickname ||
+      decision?.username ||
+      `玩家 ${playerIndex ?? ''}`.trim();
+    const resources = (o.resources || {}) as Record<string, any>;
+    const cash = Number(resources.cash ?? resources.money ?? 0) || 0;
+    const marketShare =
+      resources.marketShare !== undefined
+        ? Number(resources.marketShare) || 0
+        : undefined;
+    const reputation =
+      resources.reputation !== undefined
+        ? Number(resources.reputation) || 0
+        : undefined;
+    const innovation =
+      resources.innovation !== undefined
+        ? Number(resources.innovation) || 0
+        : undefined;
+
+    return {
+      id: String(playerIndex),
+      name,
+      cash,
+      marketShare,
+      reputation,
+      innovation,
+      passiveIncome: Number(resources.passiveIncome ?? 0) || 0,
+      passiveExpense: Number(resources.passiveExpense ?? 0) || 0,
+      delta: {},
+      broken: false,
+      achievementsUnlocked: [],
+      creditRating: resources.creditRating,
+      paletteKey: resources.paletteKey,
+      accentColor: resources.accentColor,
+    };
+  });
+
+  // 排行榜：基于现金和市场份额的简易得分
+  const leaderboard = perEntityPanel
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      score:
+        p.cash +
+        (p.marketShare || 0) * 10 +
+        (p.reputation || 0) * 1 +
+        (p.innovation || 0) * 1,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+    }));
+
+  return {
+    narrative,
+    events,
+    redactedSegments:
+      result?.redactedSegments || result?.redacted_segments || [],
+    perEntityPanel,
+    leaderboard,
+    riskCard: result?.riskCard || '',
+    opportunityCard: result?.opportunityCard || '',
+    benefitCard: result?.benefitCard || '',
+    achievements: result?.achievements || [],
+    hexagram: result?.hexagram,
+    options: result?.options,
+    ledger: result?.ledger,
+    branchingNarratives: result?.branchingNarratives,
+    nextRoundHints: result?.nextRoundHints || result?.hints || '',
+  };
 }
 
 /**
