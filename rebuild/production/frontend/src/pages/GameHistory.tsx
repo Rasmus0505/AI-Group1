@@ -13,8 +13,6 @@ import {
   Row,
   Col,
   Select,
-  DatePicker,
-  Input,
   Tabs,
   Badge,
 } from 'antd';
@@ -39,8 +37,7 @@ const formatDate = (dateString: string) => {
   });
 };
 
-const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
+const { Text } = Typography;
 
 interface HistoryItem {
   id: string;

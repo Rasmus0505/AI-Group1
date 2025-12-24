@@ -65,6 +65,7 @@ const mockEntities: TurnEntityPanel[] = [
     marketShare: 24,
     reputation: 68,
     innovation: 72,
+    attributes: { '市场份额': 24, '品牌声誉': 68, '创新能力': 72 },
     passiveIncome: 80000,
     passiveExpense: 45000,
     delta: { cash: 20000, marketShare: 2 },
@@ -81,6 +82,7 @@ const mockEntities: TurnEntityPanel[] = [
     marketShare: 21,
     reputation: 61,
     innovation: 64,
+    attributes: { '市场份额': 21, '品牌声誉': 61, '创新能力': 64 },
     passiveIncome: 70000,
     passiveExpense: 40000,
     delta: { cash: -15000, marketShare: -1 },
@@ -97,6 +99,7 @@ const mockEntities: TurnEntityPanel[] = [
     marketShare: 18,
     reputation: 57,
     innovation: 58,
+    attributes: { '市场份额': 18, '品牌声誉': 57, '创新能力': 58 },
     passiveIncome: 60000,
     passiveExpense: 38000,
     delta: { cash: 10000, marketShare: 1 },
@@ -113,6 +116,7 @@ const mockEntities: TurnEntityPanel[] = [
     marketShare: 16,
     reputation: 55,
     innovation: 52,
+    attributes: { '市场份额': 16, '品牌声誉': 55, '创新能力': 52 },
     passiveIncome: 55000,
     passiveExpense: 36000,
     delta: { cash: -5000, marketShare: 0 },
@@ -128,8 +132,8 @@ const mockTurnResult: TurnResultDTO = {
   narrative:
     '本季度，渠道战与成本战交织，主体 A 率先加码 5G 终端合作，带动市场份额回升；主体 B 收缩开支，现金流趋稳；主体 C 小步试探海外市场；主体 D 继续稳健运营，观察行业风向。',
   events: [
-    { keyword: '渠道合作', resource: 'marketShare', newValue: 24 },
-    { keyword: '成本压缩', resource: 'cash', newValue: 410000 },
+    { keyword: '渠道合作', type: 'positive', description: '渠道合作带动市场份额提升', resource: 'marketShare', newValue: 24 },
+    { keyword: '成本压缩', type: 'neutral', description: '成本压缩使现金流趋稳', resource: 'cash', newValue: 410000 },
   ],
   perEntityPanel: mockEntities,
   leaderboard: [
@@ -190,7 +194,8 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
   const [introVisible, setIntroVisible] = useState(true);
   const [ritualVisible, setRitualVisible] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
-  const [bankruptVisible, setBankruptVisible] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_bankruptVisible, setBankruptVisible] = useState(false);
   const hexagram = useMemo(() => turnResult.hexagram || mockHexagram, [turnResult]);
   const ledger = useMemo(() => turnResult.ledger || mockLedger, [turnResult]);
   const options = useMemo(() => turnResult.options || mockOptions, [turnResult]);
@@ -199,7 +204,8 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
     ledger.passiveExpense > 0 ? ledger.balance / ledger.passiveExpense : Infinity;
   const isCashWarning = cashCoverage <= 1.2; // 余额接近被动支出临界
   const hasBankrupt = entities.some(e => e.cash <= 0 || e.broken);
-  const [ritualActive, setRitualActive] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_ritualActive, setRitualActive] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-6 space-y-6 relative">
@@ -446,15 +452,21 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
           <div className="space-y-2 text-sm">
             <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10">
               <Text className="text-rose-200">风险</Text>
-              <Paragraph className="text-slate-200 mb-0">{turnResult.riskCard}</Paragraph>
+              <Paragraph className="text-slate-200 mb-0">
+                {typeof turnResult.riskCard === 'string' ? turnResult.riskCard : turnResult.riskCard?.summary}
+              </Paragraph>
             </div>
             <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10">
               <Text className="text-amber-200">机会</Text>
-              <Paragraph className="text-slate-200 mb-0">{turnResult.opportunityCard}</Paragraph>
+              <Paragraph className="text-slate-200 mb-0">
+                {typeof turnResult.opportunityCard === 'string' ? turnResult.opportunityCard : turnResult.opportunityCard?.summary}
+              </Paragraph>
             </div>
             <div className="p-3 rounded border border-emerald-500/40 bg-emerald-500/10">
               <Text className="text-emerald-200">效益</Text>
-              <Paragraph className="text-slate-200 mb-0">{turnResult.benefitCard}</Paragraph>
+              <Paragraph className="text-slate-200 mb-0">
+                {typeof turnResult.benefitCard === 'string' ? turnResult.benefitCard : turnResult.benefitCard?.summary}
+              </Paragraph>
             </div>
           </div>
         </Card>

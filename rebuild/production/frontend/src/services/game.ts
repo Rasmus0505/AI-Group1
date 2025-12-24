@@ -654,4 +654,82 @@ interface GameState {
   updatedAt: string;
 }
 
+// 游戏初始化相关类型
+export interface GameInitConfig {
+  entityCount: number;
+  gameMode: 'multi_control' | 'single_protagonist';
+  protagonistId?: string;
+  initialCash: number;
+  industryTheme?: string;
+}
+
+export interface GameInitResult {
+  backgroundStory: string;
+  entities: Array<{
+    id: string;
+    name: string;
+    cash: number;
+    attributes: Record<string, number>;
+    passiveIncome: number;
+    passiveExpense: number;
+    backstory?: string;
+  }>;
+  yearlyHexagram: {
+    name: string;
+    omen: 'positive' | 'neutral' | 'negative';
+    lines: Array<'yang' | 'yin'>;
+    text: string;
+    yearlyTheme?: string;
+  };
+  initialOptions: Array<{
+    id: string;
+    title: string;
+    description: string;
+    expectedDelta?: Record<string, number>;
+  }>;
+  cashFormula: string;
+}
+
+// 游戏初始化 API
+export const gameInitAPI = {
+  /**
+   * 生成游戏初始化数据（调用 AI）
+   */
+  generateInit: async (
+    roomId: string,
+    config: GameInitConfig
+  ): Promise<GameInitResult> => {
+    const response = await apiClient.post(`/game/${roomId}/generate-init`, config) as any;
+    if (response?.code === 200 && response.data) {
+      return response.data;
+    }
+    throw new Error(response?.message || '生成游戏初始化数据失败');
+  },
+
+  /**
+   * 保存游戏初始化数据
+   */
+  saveInit: async (
+    roomId: string,
+    initData: GameInitResult
+  ): Promise<{ success: boolean }> => {
+    const response = await apiClient.post(`/game/${roomId}/save-init`, initData) as any;
+    if (response?.code === 200) {
+      return { success: true };
+    }
+    throw new Error(response?.message || '保存游戏初始化数据失败');
+  },
+
+  /**
+   * 获取已保存的游戏初始化数据
+   */
+  getInit: async (roomId: string): Promise<GameInitResult | null> => {
+    const response = await apiClient.get(`/game/${roomId}/init`) as any;
+    if (response?.code === 200 && response.data) {
+      return response.data;
+    }
+    return null;
+  },
+};
+
 

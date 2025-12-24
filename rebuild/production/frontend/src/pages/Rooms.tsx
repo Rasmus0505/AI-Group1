@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Form, Input, InputNumber, Space, Tag, message, Empty } from 'antd';
+import { Button, Form, Input, InputNumber, Tag, message, Empty } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { roomAPI, RoomSummary } from '../services/rooms';
 import { wsService } from '../services/websocket';

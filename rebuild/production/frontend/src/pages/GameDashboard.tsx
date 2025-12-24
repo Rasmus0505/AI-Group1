@@ -140,11 +140,11 @@ Any delay in decision will shrink the negotiation window and worsen market perce
               {/* Left sidebar: 20% */}
               <div className="col-span-3">
                 <ResourcePanel
-                  player={{
-                    money: 720,
-                    force: 65,
-                    influence: 58,
-                    intelLevel: 80,
+                  playerAttributes={{
+                    '金钱': 720,
+                    '武力': 65,
+                    '影响力': 58,
+                    '情报等级': 80,
                   }}
                   opponents={[
                     { id: 'b', name: 'Rival fund', moneyMin: 120000, moneyMax: 200000, confidence: 'medium' },
