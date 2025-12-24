@@ -203,18 +203,18 @@ function Rooms() {
           <div className="rooms-header" style={{ marginBottom: 16 }}>
             <div className="rooms-title">创建房间</div>
           </div>
-          <Form form={form} layout="inline" className="create-room" initialValues={{ maxPlayers: 4 }}>
+          <Form form={form} layout="inline" className="create-room">
             <Form.Item name="name" rules={[{ required: true, message: '请输入房间名称' }]}>
-              <Input placeholder="房间名称" style={{ width: 220 }} />
+              <Input placeholder="房间名称" style={{ width: 220 }} autoComplete="off" />
             </Form.Item>
             <Form.Item name="maxPlayers" rules={[{ required: true, message: '请输入人数上限' }]}>
-              <InputNumber min={2} max={10} placeholder="人数上限" />
+              <InputNumber min={2} max={10} placeholder="房间上限人数" style={{ width: 160 }} autoComplete="off" />
             </Form.Item>
             <Form.Item name="password">
-              <Input.Password placeholder="房间密码（可选）" style={{ width: 220 }} />
+              <Input.Password placeholder="房间密码（可选）" style={{ width: 220, borderRadius: '14px' }} autoComplete="new-password" />
             </Form.Item>
             <Form.Item>
-              <Button type="primary" onClick={handleCreate} loading={createLoading} style={{ height: 40, paddingInline: 20 }}>
+              <Button type="primary" onClick={handleCreate} loading={createLoading} style={{ height: 40, paddingInline: 20, background: 'rgba(200, 235, 200, 0.3)', color: '#0f172a', border: '1px solid rgba(127, 201, 127, 0.15)', fontSize: '16px', fontWeight: 600 }}>
                 创建
               </Button>
             </Form.Item>

@@ -339,6 +339,7 @@
   padding: 18px;
   border-radius: 20px;
   border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.05);
 }
 
 .soft-green {
@@ -461,7 +462,7 @@
 .create-room {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 

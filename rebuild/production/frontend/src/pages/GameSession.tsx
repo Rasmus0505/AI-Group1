@@ -159,7 +159,7 @@ function GameSessionPage() {
       <div className="game-container">
         {/* 顶部状态栏 */}
         <header className="status-bar">
-          <div className="status-group">
+          <div className="status-group" style={{ marginLeft: 16 }}>
             <Button
               ghost
               icon={<ArrowRight className="rotate-180" size={16} />}
@@ -172,7 +172,7 @@ function GameSessionPage() {
                 <span className="text-[11px] text-slate-500 uppercase tracking-wider">当前回合</span>
                 <span className="text-lg font-bold text-slate-900">ROUND {session.currentRound}</span>
               </div>
-              <Divider type="vertical" className="h-8 border-slate-200" />
+              <Divider type="vertical" className="h-8 border-slate-200" style={{ marginRight: 12 }} />
               <div className="flex flex-col">
                 <span className="text-[11px] text-slate-500 uppercase tracking-wider">阶段</span>
                 <Tag color="cyan" className="m-0 uppercase">{session.roundStatus}</Tag>
@@ -188,7 +188,7 @@ function GameSessionPage() {
               </span>
             </div>
             <div className="status-chip">
-              <div className={`w-2 h-2 rounded-full ${socketStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-rose-500'}`} />
+              <div className={`w-2 h-2 rounded-full ${socketStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981_,_0_0_16px_#10b981]' : 'bg-rose-500'}`} />
               <span className="text-sm font-medium">{socketStatus === 'connected' ? 'LIVE' : 'OFFLINE'}</span>
             </div>
 

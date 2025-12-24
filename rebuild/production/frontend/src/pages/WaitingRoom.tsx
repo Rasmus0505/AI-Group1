@@ -26,6 +26,8 @@ function WaitingRoom() {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [realtimeState, setRealtimeState] = useState<RoomRealtimeState | null>(null);
+  const [hostSetupHovered, setHostSetupHovered] = useState(false);
+  const [startGameHovered, setStartGameHovered] = useState(false);
   const socketStatus = useSocket();
   useMessageRouter();
 
@@ -164,8 +166,8 @@ function WaitingRoom() {
 
   return (
     <Spin spinning={loading && !currentRoom}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <Button onClick={() => navigate('/rooms')}>返回房间列表</Button>
+      <Space direction="vertical" size="large" style={{ width: '100%', padding: '24px 24px' }}>
+        <Button onClick={() => navigate('/rooms')} style={{ marginLeft: 0 }}>返回房间列表</Button>
         <Card
           title={`房间等待中：${currentRoom?.name || roomId}`}
           extra={
@@ -188,12 +190,32 @@ function WaitingRoom() {
               </Tag>
               {currentRoom?.hostId === user?.userId && (
                 <>
-                  <Button type="primary" onClick={() => navigate(`/rooms/${roomId}/host-setup`)}>
+                  <Button 
+                    type="primary" 
+                    onClick={() => navigate(`/rooms/${roomId}/host-setup`)}
+                    onMouseEnter={() => setHostSetupHovered(true)}
+                    onMouseLeave={() => setHostSetupHovered(false)}
+                    style={{ 
+                      background: hostSetupHovered ? '#40a9ff' : '#1890ff',
+                      color: '#fff', 
+                      border: '1px solid #1890ff',
+                      transition: 'all 0.3s ease',
+                      transform: hostSetupHovered ? 'translateY(-2px)' : 'translateY(0)',
+                      boxShadow: hostSetupHovered ? '0 8px 16px rgba(24, 144, 255, 0.4)' : '0 2px 8px rgba(24, 144, 255, 0.2)',
+                    }}
+                  >
                     主持人配置
                   </Button>
                   <Button
                     type="default"
                     onClick={() => navigate(`/rooms/${roomId}/host-setup`)}
+                    onMouseEnter={() => setStartGameHovered(true)}
+                    onMouseLeave={() => setStartGameHovered(false)}
+                    style={{
+                      transition: 'all 0.3s ease',
+                      transform: startGameHovered ? 'translateY(-2px)' : 'translateY(0)',
+                      boxShadow: startGameHovered ? '0 8px 16px rgba(0, 0, 0, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+                    }}
                   >
                     开始游戏（通过主持人页）
                   </Button>

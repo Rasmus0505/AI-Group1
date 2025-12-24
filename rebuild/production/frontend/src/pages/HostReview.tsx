@@ -311,7 +311,7 @@ function HostReviewPage() {
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Text strong>事件类型:</Text>
-            <Space style={{ marginTop: 8 }}>
+            <Space style={{ marginTop: 8, marginLeft: 24 }}>
               <Button
                 type={eventType === 'single_round' ? 'primary' : 'default'}
                 onClick={() => setEventType('single_round')}

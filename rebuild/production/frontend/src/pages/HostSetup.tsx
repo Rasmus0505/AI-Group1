@@ -72,15 +72,15 @@ function HostSetup() {
       formApi.setFieldsValue({
         apiProvider: data.apiProvider,
         apiEndpoint: data.apiEndpoint,
-        apiHeaders: data.apiHeaders ? JSON.stringify(data.apiHeaders, null, 2) : '',
-        apiBodyTemplate: data.apiBodyTemplate ? JSON.stringify(data.apiBodyTemplate, null, 2) : '',
+        apiHeaders: data.apiHeaders ? JSON.stringify(data.apiHeaders, null, 2) : undefined,
+        apiBodyTemplate: data.apiBodyTemplate ? JSON.stringify(data.apiBodyTemplate, null, 2) : undefined,
       });
       formRules.setFieldsValue({ gameRules: data.gameRules });
       formPlayers.setFieldsValue({
-        totalDecisionEntities: data.totalDecisionEntities,
-        humanPlayerCount: data.humanPlayerCount,
-        aiPlayerCount: data.aiPlayerCount,
-        decisionTimeLimit: data.decisionTimeLimit,
+        totalDecisionEntities: undefined,
+        humanPlayerCount: undefined,
+        aiPlayerCount: undefined,
+        decisionTimeLimit: undefined,
         timeoutStrategy: data.timeoutStrategy,
       });
     } catch (error) {
@@ -257,28 +257,28 @@ function HostSetup() {
             name="totalDecisionEntities"
             rules={[{ required: true, message: '请输入总主体数' }]}
           >
-            <InputNumber min={1} />
+            <InputNumber min={1} placeholder="请输入..." />
           </Form.Item>
           <Form.Item
             label="人类玩家数"
             name="humanPlayerCount"
             rules={[{ required: true, message: '请输入人类玩家数' }]}
           >
-            <InputNumber min={0} />
+            <InputNumber min={0} placeholder="请输入..." />
           </Form.Item>
           <Form.Item
             label="AI玩家数"
             name="aiPlayerCount"
             rules={[{ required: true, message: '请输入AI玩家数' }]}
           >
-            <InputNumber min={0} />
+            <InputNumber min={0} placeholder="请输入..." />
           </Form.Item>
           <Form.Item
             label="决策时限(分钟)"
             name="decisionTimeLimit"
             rules={[{ required: true, message: '请输入决策时限' }]}
           >
-            <InputNumber min={1} />
+            <InputNumber min={1} placeholder="请输入..." />
           </Form.Item>
           <Form.Item label="超时策略" name="timeoutStrategy">
             <Input placeholder="auto_submit / skip / extend 等" />
