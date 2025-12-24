@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>双API测试 - 凡墙皆是门</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0d1a; color: #e0e0e0; min-height: 100vh; padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 30px; color: #6366f1; }
+    
+    /* 配置区 */
+    .config-section {
+      background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 20px;
+      border: 1px solid #2d2d44;
+    }
+    .config-row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .config-group { flex: 1; min-width: 300px; }
+    .config-group h3 { margin-bottom: 12px; color: #a0a0c0; font-size: 14px; }
+    .config-group input {
+      width: 100%; padding: 10px 14px; background: #252540; border: 1px solid #3d3d5c;
+      border-radius: 6px; color: #e0e0e0; font-size: 14px; margin-bottom: 10px;
+    }
+    .config-group input:focus { outline: none; border-color: #6366f1; }
+    
+    /* 控制按钮 */
+    .controls { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .btn {
+      padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 600; transition: all 0.2s;
+    }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-primary:hover { background: #5558e3; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: transparent; border: 1px solid #4a4a6a; color: #a0a0c0; }
+    .btn-success { background: #34d399; color: #0d0d1a; }
+    
+    /* 步骤指示器 */
+    .steps {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 20px;
+      padding: 16px; background: #252540; border-radius: 8px;
+    }
+    .step { padding: 8px 16px; border-radius: 6px; font-size: 13px; color: #6a6a8a; }
+    .step.active { background: #6366f1; color: white; }
+    .step.done { background: rgba(52,211,153,0.2); color: #34d399; }
+    .step-arrow { color: #4a4a6a; }
+    
+    /* 输出区 */
+    .output-section {
+      background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 20px;
+      border: 1px solid #2d2d44;
+    }
+    .output-section h3 { margin-bottom: 12px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .output-content {
+      background: #0d0d1a; border-radius: 8px; padding: 16px;
+      max-height: 400px; overflow-y: auto; white-space: pre-wrap;
+      font-size: 14px; line-height: 1.7;
+    }
+    .output-content.json { font-family: Monaco, Consolas, monospace; font-size: 12px; }
+    
+    /* 决策输入 */
+    .decisions-section { margin-top: 20px; }
+    .decision-input {
+      display: flex; gap: 10px; margin-bottom: 10px; align-items: center;
+    }
+    .decision-input span { min-width: 80px; color: #a0a0c0; }
+    .decision-input input { flex: 1; }
+    
+    /* 状态提示 */
+    .status { padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .status.loading { background: rgba(99,102,241,0.2); color: #818cf8; }
+    .status.success { background: rgba(52,211,153,0.2); color: #34d399; }
+    .status.error { background: rgba(239,68,68,0.2); color: #ef4444; }
+    
+    /* 回合信息 */
+    .round-info {
+      background: #252540; padding: 12px 20px; border-radius: 8px;
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+    }
+    .round-number { font-size: 18px; font-weight: 600; color: #6366f1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 双API测试 - 凡墙皆是门</h1>
+    
+    <!-- API配置 -->
+    <div class="config-section">
+      <div class="config-row">
+        <div class="config-group">
+          <h3>📝 剧情推演API</h3>
+          <input type="text" id="narrativeEndpoint" placeholder="API Endpoint (如: https://api.deepseek.com/v1/chat/completions)" value="https://api.deepseek.com/v1/chat/completions">
+          <input type="password" id="narrativeApiKey" placeholder="API Key">
+          <input type="text" id="narrativeModel" placeholder="模型 (默认: deepseek-chat)" value="deepseek-chat">
+        </div>
+        <div class="config-group">
+          <h3>📊 数值解析API</h3>
+          <input type="text" id="parserEndpoint" placeholder="API Endpoint" value="https://api.deepseek.com/v1/chat/completions">
+          <input type="password" id="parserApiKey" placeholder="API Key (可与剧情API相同)">
+          <input type="text" id="parserModel" placeholder="模型 (默认: deepseek-chat)" value="deepseek-chat">
+        </div>
+      </div>
+      <button class="btn btn-secondary" onclick="copyNarrativeKey()" style="margin-top:10px">📋 复制剧情API Key到解析API</button>
+    </div>
+
+    <!-- 回合信息 -->
+    <div class="round-info">
+      <span class="round-number">第 <span id="currentRound">0</span> 回合</span>
+      <span id="gameStatus" style="color:#6a6a8a">未开始</span>
+    </div>
+
+    <!-- 步骤指示器 -->
+    <div class="steps">
+      <div class="step" id="step1">1. 初始化/生成剧情</div>
+      <span class="step-arrow">→</span>
+      <div class="step" id="step2">2. 解析数据</div>
+      <span class="step-arrow">→</span>
+      <div class="step" id="step3">3. 玩家决策</div>
+      <span class="step-arrow">→</span>
+      <div class="step" id="step4">4. 下一回合</div>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="controls">
+      <button class="btn btn-primary" id="btnInit" onclick="initGame()">🚀 初始化游戏</button>
+      <button class="btn btn-primary" id="btnNarrative" onclick="generateNarrative()" disabled>📖 生成剧情</button>
+      <button class="btn btn-success" id="btnParse" onclick="parseData()" disabled>📊 解析数据</button>
+      <button class="btn btn-primary" id="btnNextRound" onclick="nextRound()" disabled>➡️ 下一回合</button>
+      <button class="btn btn-secondary" onclick="resetGame()">🔄 重置</button>
+    </div>
+
+    <!-- 状态提示 -->
+    <div class="status" id="statusBar" style="display:none"></div>
+
+    <!-- 剧情输出 -->
+    <div class="output-section" id="narrativeSection" style="display:none">
+      <h3>📖 剧情输出</h3>
+      <div class="output-content" id="narrativeOutput"></div>
+    </div>
+
+    <!-- 解析输出 -->
+    <div class="output-section" id="parserSection" style="display:none">
+      <h3>📊 解析输出 <span id="parseStatus" style="font-size:12px;margin-left:10px"></span></h3>
+      <div class="output-content json" id="parserOutput"></div>
+    </div>
+
+    <!-- 玩家决策 -->
+    <div class="output-section decisions-section" id="decisionsSection" style="display:none">
+      <h3>🎯 玩家决策输入</h3>
+      <div class="decision-input">
+        <span>主体A:</span>
+        <input type="text" id="decisionA" placeholder="输入主体A的决策...">
+      </div>
+      <div class="decision-input">
+        <span>主体B:</span>
+        <input type="text" id="decisionB" placeholder="输入主体B的决策...">
+      </div>
+      <div class="decision-input">
+        <span>主体C:</span>
+        <input type="text" id="decisionC" placeholder="输入主体C的决策...">
+      </div>
+      <div style="margin-top:10px">
+        <span style="color:#6a6a8a;font-size:13px">主持人补充说明（可选）:</span>
+        <input type="text" id="extraPrompt" placeholder="额外的推演提示..." style="width:100%;margin-top:8px">
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
