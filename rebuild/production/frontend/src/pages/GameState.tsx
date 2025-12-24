@@ -133,6 +133,13 @@ function GameStatePage() {
     if (!sessionId) return;
     wsService.setActiveSession(sessionId);
 
+    // 加入房间以接收 WebSocket 广播事件
+    // 注意：后端使用 io.to(roomId).emit() 广播事件，所以前端必须加入房间
+    if (gameState?.roomId) {
+      wsService.trackRoom(gameState.roomId);
+      wsService.send('join_room', { roomId: gameState.roomId });
+    }
+
     const handleRoundChanged = (payload: unknown) => {
       if (
         !payload ||
@@ -203,13 +210,17 @@ function GameStatePage() {
     }, 3000); // 从5秒改为3秒，提高刷新频率
 
     return () => {
+      // 离开房间
+      if (gameState?.roomId) {
+        wsService.untrackRoom(gameState.roomId);
+      }
       wsService.off('round_changed', handleRoundChanged);
       wsService.off('stage_changed', handleStageChanged);
       wsService.off('game_finished', handleGameFinished);
       wsService.off('time_limit_adjusted', handleTimeLimitAdjusted);
       clearInterval(refreshInterval);
     };
-  }, [sessionId]);
+  }, [sessionId, gameState?.roomId]);
 
   if (loading && !gameState) {
     return (
@@ -255,13 +266,6 @@ function GameStatePage() {
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', minHeight: '100vh' }}>
       <div style={{ marginBottom: '16px' }}>
-        <Button
-          icon={<ArrowLeft size={16} />}
-          onClick={() => navigate(-1)}
-          style={{ marginRight: 8 }}
-        >
-          返回
-        </Button>
         <Button
           onClick={() => navigate('/rooms')}
         >

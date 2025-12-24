@@ -268,6 +268,7 @@ function InferenceResultPage() {
 
   const [result, setResult] = useState<InferenceResult | null>(null);
   const [progress, setProgress] = useState<InferenceProgress | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
 
   // 资产看板的本地状态（仅用于前端动效演示，不依赖后端返回）
   const [assets, setAssets] = useState<Record<string, number>>({
@@ -420,6 +421,18 @@ function InferenceResultPage() {
     try {
       const data = await gameAPI.getInferenceResult(sessionId, Number(round));
       setResult(data);
+      
+      // 获取会话信息以获取 roomId（用于加入 WebSocket 房间）
+      if (!roomId) {
+        try {
+          const sessionData = await gameAPI.getSession(sessionId);
+          if (sessionData.roomId) {
+            setRoomId(sessionData.roomId);
+          }
+        } catch {
+          // 忽略获取会话信息失败
+        }
+      }
     } catch (err: any) {
       message.error('同步结果失败');
     }
@@ -455,6 +468,13 @@ function InferenceResultPage() {
 
   useEffect(() => {
     loadResult();
+    
+    // 加入房间以接收 WebSocket 广播事件
+    if (roomId) {
+      wsService.trackRoom(roomId);
+      wsService.send('join_room', { roomId });
+    }
+    
     const handleProgress = (p: any) => setProgress(p);
     const handleCompleted = () => loadResult();
     const handleFailed = (payload: any) => {
@@ -471,11 +491,15 @@ function InferenceResultPage() {
     wsService.on('inference_completed', handleCompleted);
     wsService.on('inference_failed', handleFailed);
     return () => {
+      // 离开房间
+      if (roomId) {
+        wsService.untrackRoom(roomId);
+      }
       wsService.off('inference_progress', handleProgress);
       wsService.off('inference_completed', handleCompleted);
       wsService.off('inference_failed', handleFailed);
     };
-  }, [sessionId, round]);
+  }, [sessionId, round, roomId]);
 
   return (
     <div className="min-h-screen p-8 text-slate-200 relative overflow-hidden">

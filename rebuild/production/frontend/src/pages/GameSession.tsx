@@ -46,7 +46,6 @@ function GameSessionPage() {
   const [decisionText, setDecisionText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
-  const [displayNarrative] = useState('欢迎来到游戏，正在等待第一回合开始...');
   const [recommendedOptions, setRecommendedOptions] = useState<Array<{
     option_id: string;
     text: string;
@@ -253,6 +252,13 @@ function GameSessionPage() {
     if (!sessionId) return;
     wsService.setActiveSession(sessionId);
 
+    // 加入房间以接收 WebSocket 广播事件
+    // 注意：后端使用 io.to(roomId).emit() 广播事件，所以前端必须加入房间
+    if (session?.roomId) {
+      wsService.trackRoom(session.roomId);
+      wsService.send('join_room', { roomId: session.roomId });
+    }
+
     const handleDecisionStatusUpdate = () => loadDecisions();
 
     const handleGameStateUpdate = (payload: any) => {
@@ -297,19 +303,44 @@ function GameSessionPage() {
       }
     };
 
+    // 推演完成事件
+    const handleInferenceCompleted = (payload: any) => {
+      if (payload.sessionId === sessionId) {
+        message.success('AI 推演完成！');
+        loadTurnResult();
+        loadSession();
+      }
+    };
+
+    // 推演进度事件
+    const handleInferenceProgress = (payload: any) => {
+      if (payload.sessionId === sessionId && payload.message) {
+        // 可以在这里显示进度提示
+        console.log(`推演进度: ${payload.progress}% - ${payload.message}`);
+      }
+    };
+
     wsService.on('decision_status_update', handleDecisionStatusUpdate);
     wsService.on('game_state_update', handleGameStateUpdate);
     wsService.on('achievement_unlocked', handleAchievementUnlocked);
     wsService.on('time_limit_adjusted', handleTimeLimitAdjusted);
+    wsService.on('inference_completed', handleInferenceCompleted);
+    wsService.on('inference_progress', handleInferenceProgress);
 
     return () => {
       wsService.setActiveSession(null);
+      // 离开房间
+      if (session?.roomId) {
+        wsService.untrackRoom(session.roomId);
+      }
       wsService.off('decision_status_update', handleDecisionStatusUpdate);
       wsService.off('game_state_update', handleGameStateUpdate);
       wsService.off('achievement_unlocked', handleAchievementUnlocked);
       wsService.off('time_limit_adjusted', handleTimeLimitAdjusted);
+      wsService.off('inference_completed', handleInferenceCompleted);
+      wsService.off('inference_progress', handleInferenceProgress);
     };
-  }, [sessionId, loadDecisions, loadTurnResult, navigate, handleAchievementUnlock]);
+  }, [sessionId, session?.roomId, loadDecisions, loadTurnResult, navigate, handleAchievementUnlock, loadSession]);
 
   // 键盘快捷键：Ctrl+Enter 提交决策
   useEffect(() => {
@@ -399,6 +430,22 @@ function GameSessionPage() {
     if (!turnResult?.events) return [];
     return turnResult.events.filter((e: any) => e.type === 'ongoing' || e.status === 'ongoing');
   }, [turnResult?.events]);
+
+  // 获取当前叙事内容（从推演结果中获取）
+  const displayNarrative = useMemo(() => {
+    // 优先使用 turnResult 中的叙事
+    if (turnResult?.narrative) {
+      return turnResult.narrative;
+    }
+    // 其次尝试从 gameState 中获取
+    if (gameState) {
+      const gs = gameState as any;
+      if (gs.narrative) return gs.narrative;
+      if (gs.uiTurnResult?.narrative) return gs.uiTurnResult.narrative;
+    }
+    // 默认提示
+    return '欢迎来到游戏，正在等待第一回合开始...';
+  }, [turnResult, gameState]);
 
   // 解析卦象数据为 TurnHexagram 格式
   const parsedHexagram = useMemo((): TurnHexagram | null => {

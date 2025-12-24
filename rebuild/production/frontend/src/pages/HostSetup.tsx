@@ -170,6 +170,9 @@ function HostSetup() {
   
   // 默认规则Modal状态
   const [defaultRulesVisible, setDefaultRulesVisible] = useState(false);
+  
+  // 标记是否已从服务器加载配置（防止 provider 变化时覆盖已保存的值）
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   const currentStep = useMemo(() => {
     if (config?.initializationCompleted) return 4;
@@ -178,25 +181,38 @@ function HostSetup() {
     return 1;
   }, [config, initData]);
 
-  // 根据提供商更新可用模型
+  // 根据提供商更新可用模型（仅在用户手动切换且配置未加载时更新）
   useEffect(() => {
     const provider = AI_PROVIDERS.find(p => p.id === selectedProvider);
     if (provider) {
       setAvailableModels(provider.models);
-      if (provider.id !== 'custom') {
+      // 只有在配置未加载时才设置默认值，避免覆盖已保存的配置
+      if (!configLoaded && provider.id !== 'custom') {
         formApi.setFieldsValue({
           endpoint: provider.endpoint,
           model: provider.defaultModel,
         });
       }
     }
-  }, [selectedProvider, formApi]);
+  }, [selectedProvider, formApi, configLoaded]);
 
   // 加载配置并同步到表单
   const loadConfig = useCallback(async () => {
     if (!roomId) return;
     setLoading(true);
     try {
+      // 先检查房间状态，如果游戏已开始则重定向
+      try {
+        const session = await gameAPI.getActiveSessionByRoom(roomId);
+        if (session && session.sessionId) {
+          message.info('游戏已开始，正在跳转到游戏页面...');
+          navigate(`/game/${session.sessionId}/state`, { replace: true });
+          return;
+        }
+      } catch {
+        // 没有活跃会话，继续加载配置
+      }
+      
       const data = await hostConfigAPI.get(roomId);
       setConfig(data);
       
@@ -260,12 +276,15 @@ function HostSetup() {
       } catch {
         // 忽略，可能还没有初始化数据
       }
+      
+      // 标记配置已加载，防止 provider useEffect 覆盖已保存的值
+      setConfigLoaded(true);
     } catch (error) {
       message.error((error as Error).message || '获取主持人配置失败');
     } finally {
       setLoading(false);
     }
-  }, [roomId, formApi, formRules, formPlayers]);
+  }, [roomId, formApi, formRules, formPlayers, navigate]);
 
   useEffect(() => {
     loadConfig();

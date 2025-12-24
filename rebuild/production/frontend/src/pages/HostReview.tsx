@@ -25,6 +25,7 @@ function HostReviewPage() {
 
   const [reviewData, setReviewData] = useState<ReviewDecisions | null>(null);
   const [loading, setLoading] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
   const [eventModalVisible, setEventModalVisible] = useState(false);
   const [ruleModalVisible, setRuleModalVisible] = useState(false);
   const [submitModalVisible, setSubmitModalVisible] = useState(false);
@@ -51,6 +52,10 @@ function HostReviewPage() {
       if (!Number.isFinite(targetRound) || targetRound <= 0) {
         const session = await gameAPI.getSession(sessionId);
         targetRound = session.currentRound;
+        // 获取 roomId 用于加入 WebSocket 房间
+        if (session.roomId && !roomId) {
+          setRoomId(session.roomId);
+        }
       }
 
       const data = await gameAPI.getReviewDecisions(sessionId, targetRound);
@@ -72,6 +77,12 @@ function HostReviewPage() {
   useEffect(() => {
     if (!sessionId) return;
     wsService.setActiveSession(sessionId);
+
+    // 加入房间以接收 WebSocket 广播事件
+    if (roomId) {
+      wsService.trackRoom(roomId);
+      wsService.send('join_room', { roomId });
+    }
 
     const handleRoundStageChanged = (payload: unknown) => {
       if (
@@ -127,6 +138,10 @@ function HostReviewPage() {
     });
 
     return () => {
+      // 离开房间
+      if (roomId) {
+        wsService.untrackRoom(roomId);
+      }
       wsService.off('round_stage_changed', handleRoundStageChanged);
       wsService.off('stage_changed', handleStageChanged);
       wsService.off('temporary_event_added', reload);
@@ -134,7 +149,7 @@ function HostReviewPage() {
       wsService.off('inference_started', () => {});
       wsService.off('inference_completed', () => {});
     };
-  }, [sessionId]);
+  }, [sessionId, roomId]);
 
   const handleAddEvent = async () => {
     if (!sessionId || !reviewData) return;
