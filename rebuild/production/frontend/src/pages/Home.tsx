@@ -2,12 +2,7 @@ import { Button, Typography } from 'antd';
 import {
   ArrowRightOutlined,
   TeamOutlined,
-  PlayCircleOutlined,
-  LogoutOutlined,
   LoginOutlined,
-  ThunderboltOutlined,
-  HistoryOutlined,
-  LockOutlined,
   UserOutlined,
   EyeOutlined,
 } from '@ant-design/icons';

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Button,
@@ -12,27 +12,115 @@ import {
   Typography,
   Tag,
   Divider,
+  Select,
+  Collapse,
+  Spin,
+  Alert,
+  Table,
+  Switch,
+  Tooltip,
 } from 'antd';
+import {
+  ReloadOutlined,
+  RocketOutlined,
+  SaveOutlined,
+  QuestionCircleOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
+} from '@ant-design/icons';
 import { hostConfigAPI, HostConfig } from '../services/rooms';
-import { gameAPI } from '../services/game';
+import { gameAPI, gameInitAPI, GameInitResult } from '../services/game';
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Panel } = Collapse;
 
-const safeParseJson = (value?: string) => {
-  if (!value) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    throw new Error('JSON 解析失败，请检查格式');
-  }
-};
+// 主流 AI 模型提供商配置
+const AI_PROVIDERS = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    models: [
+      { id: 'deepseek-chat', name: 'DeepSeek Chat (推荐)' },
+      { id: 'deepseek-coder', name: 'DeepSeek Coder' },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' },
+    ],
+    defaultModel: 'deepseek-chat',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+    ],
+    defaultModel: 'gpt-4o-mini',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    endpoint: 'https://api.anthropic.com/v1/messages',
+    models: [
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
+    ],
+    defaultModel: 'claude-3-5-sonnet-20241022',
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 GLM',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    models: [
+      { id: 'glm-4-plus', name: 'GLM-4 Plus' },
+      { id: 'glm-4', name: 'GLM-4' },
+      { id: 'glm-4-flash', name: 'GLM-4 Flash' },
+    ],
+    defaultModel: 'glm-4',
+  },
+  {
+    id: 'qwen',
+    name: '通义千问',
+    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    models: [
+      { id: 'qwen-max', name: 'Qwen Max' },
+      { id: 'qwen-plus', name: 'Qwen Plus' },
+      { id: 'qwen-turbo', name: 'Qwen Turbo' },
+    ],
+    defaultModel: 'qwen-plus',
+  },
+  {
+    id: 'moonshot',
+    name: 'Moonshot (月之暗面)',
+    endpoint: 'https://api.moonshot.cn/v1/chat/completions',
+    models: [
+      { id: 'moonshot-v1-128k', name: 'Moonshot V1 128K' },
+      { id: 'moonshot-v1-32k', name: 'Moonshot V1 32K' },
+      { id: 'moonshot-v1-8k', name: 'Moonshot V1 8K' },
+    ],
+    defaultModel: 'moonshot-v1-32k',
+  },
+  {
+    id: 'custom',
+    name: '自定义',
+    endpoint: '',
+    models: [],
+    defaultModel: '',
+  },
+];
 
 type ApiFormValues = {
-  apiProvider?: string;
-  apiEndpoint?: string;
-  apiHeaders?: string;
-  apiBodyTemplate?: string;
+  provider: string;
+  model: string;
+  apiKey: string;
+  endpoint: string;
+  streamOutput: boolean;
+  customHeaders?: string;
+  customBodyTemplate?: string;
 };
 
 type RulesFormValues = {
@@ -47,64 +135,179 @@ type PlayerFormValues = {
   timeoutStrategy?: string;
 };
 
+type GameInitFormValues = {
+  initialCash: number;
+  gameMode: 'multi_control' | 'single_protagonist';
+  industryTheme?: string;
+};
+
+
 function HostSetup() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const [config, setConfig] = useState<HostConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formApi] = Form.useForm();
-  const [formRules] = Form.useForm();
-  const [formPlayers] = Form.useForm();
+  const [formApi] = Form.useForm<ApiFormValues>();
+  const [formRules] = Form.useForm<RulesFormValues>();
+  const [formPlayers] = Form.useForm<PlayerFormValues>();
+  const [formInit] = Form.useForm<GameInitFormValues>();
+  
+  // API Key 显示状态
+  const [showApiKey, setShowApiKey] = useState(false);
+  
+  // 当前选择的提供商
+  const [selectedProvider, setSelectedProvider] = useState<string>('deepseek');
+  const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([]);
+  
+  // 游戏初始化状态
+  const [initData, setInitData] = useState<GameInitResult | null>(null);
+  const [generatingInit, setGeneratingInit] = useState(false);
 
   const currentStep = useMemo(() => {
-    if (config?.initializationCompleted) return 3;
+    if (config?.initializationCompleted) return 4;
+    if (initData) return 3;
     if (config?.validationStatus === 'validated') return 2;
     return 1;
-  }, [config]);
+  }, [config, initData]);
 
-  const loadConfig = async () => {
+  // 根据提供商更新可用模型
+  useEffect(() => {
+    const provider = AI_PROVIDERS.find(p => p.id === selectedProvider);
+    if (provider) {
+      setAvailableModels(provider.models);
+      if (provider.id !== 'custom') {
+        formApi.setFieldsValue({
+          endpoint: provider.endpoint,
+          model: provider.defaultModel,
+        });
+      }
+    }
+  }, [selectedProvider, formApi]);
+
+  // 加载配置并同步到表单
+  const loadConfig = useCallback(async () => {
     if (!roomId) return;
     setLoading(true);
     try {
       const data = await hostConfigAPI.get(roomId);
       setConfig(data);
+      
+      // 解析已保存的配置
+      let provider = 'deepseek';
+      let model = 'deepseek-chat';
+      let apiKey = '';
+      let streamOutput = false;
+      
+      // 从 headers 中提取 API Key
+      if (data.apiHeaders) {
+        const headers = data.apiHeaders as Record<string, string>;
+        const authHeader = headers['Authorization'] || headers['authorization'];
+        if (authHeader) {
+          apiKey = authHeader.replace(/^Bearer\s+/i, '');
+        }
+      }
+      
+      // 从 bodyTemplate 中提取 model 和 stream
+      if (data.apiBodyTemplate) {
+        const body = data.apiBodyTemplate as Record<string, unknown>;
+        if (body.model) model = body.model as string;
+        if (body.stream !== undefined) streamOutput = body.stream as boolean;
+      }
+      
+      // 识别提供商
+      if (data.apiProvider) {
+        provider = data.apiProvider;
+      } else if (data.apiEndpoint) {
+        const matchedProvider = AI_PROVIDERS.find(p => 
+          p.endpoint && data.apiEndpoint?.includes(new URL(p.endpoint).hostname)
+        );
+        if (matchedProvider) provider = matchedProvider.id;
+      }
+      
+      setSelectedProvider(provider);
+      
       formApi.setFieldsValue({
-        apiProvider: data.apiProvider,
-        apiEndpoint: data.apiEndpoint,
-        apiHeaders: data.apiHeaders ? JSON.stringify(data.apiHeaders, null, 2) : undefined,
-        apiBodyTemplate: data.apiBodyTemplate ? JSON.stringify(data.apiBodyTemplate, null, 2) : undefined,
+        provider,
+        model,
+        apiKey,
+        endpoint: data.apiEndpoint || '',
+        streamOutput,
       });
-      formRules.setFieldsValue({ gameRules: data.gameRules });
+      
+      formRules.setFieldsValue({ gameRules: data.gameRules || undefined });
       formPlayers.setFieldsValue({
-        totalDecisionEntities: undefined,
-        humanPlayerCount: undefined,
-        aiPlayerCount: undefined,
-        decisionTimeLimit: undefined,
-        timeoutStrategy: data.timeoutStrategy,
+        totalDecisionEntities: data.totalDecisionEntities || undefined,
+        humanPlayerCount: data.humanPlayerCount || undefined,
+        aiPlayerCount: data.aiPlayerCount || undefined,
+        decisionTimeLimit: data.decisionTimeLimit || undefined,
+        timeoutStrategy: data.timeoutStrategy || undefined,
       });
+      
+      // 尝试加载已保存的初始化数据
+      try {
+        const savedInit = await gameInitAPI.getInit(roomId);
+        if (savedInit) {
+          setInitData(savedInit);
+        }
+      } catch {
+        // 忽略，可能还没有初始化数据
+      }
     } catch (error) {
       message.error((error as Error).message || '获取主持人配置失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [roomId, formApi, formRules, formPlayers]);
 
   useEffect(() => {
     loadConfig();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+  }, [loadConfig]);
 
+  // 构建 API 配置并保存
   const handleSaveApi = async (values: ApiFormValues) => {
     if (!roomId) return;
+    
+    if (!values.apiKey) {
+      message.error('请输入 API Key');
+      return;
+    }
+    
     setSaving(true);
     try {
-      const payload = {
-        apiProvider: values.apiProvider,
-        apiEndpoint: values.apiEndpoint,
-        apiHeaders: safeParseJson(values.apiHeaders),
-        apiBodyTemplate: safeParseJson(values.apiBodyTemplate),
+      const provider = AI_PROVIDERS.find(p => p.id === values.provider);
+      
+      // 构建 headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${values.apiKey}`,
       };
+      
+      // 构建 body template
+      const bodyTemplate: Record<string, unknown> = {
+        model: values.model || provider?.defaultModel || 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: '你是《凡墙皆是门》游戏的推演引擎，根据玩家的决策和游戏规则，生成游戏剧情和结果。',
+          },
+          {
+            role: 'user',
+            content: '{{prompt}}',
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        stream: values.streamOutput || false,
+      };
+      
+      const payload = {
+        apiProvider: values.provider,
+        apiEndpoint: values.endpoint,
+        apiHeaders: headers,
+        apiBodyTemplate: bodyTemplate,
+      };
+      
       const data = await hostConfigAPI.updateApi(roomId, payload);
       setConfig(data);
       message.success('API 配置已保存');
@@ -177,6 +380,47 @@ function HostSetup() {
     }
   };
 
+  // 生成游戏初始化数据
+  const handleGenerateInit = async (values: GameInitFormValues) => {
+    if (!roomId || !config) return;
+    
+    const entityCount = config.totalDecisionEntities || 4;
+    if (entityCount < 2) {
+      message.error('请先在玩家配置中设置主体数量（至少2个）');
+      return;
+    }
+
+    setGeneratingInit(true);
+    try {
+      const result = await gameInitAPI.generateInit(roomId, {
+        entityCount,
+        gameMode: values.gameMode,
+        initialCash: values.initialCash,
+        industryTheme: values.industryTheme,
+      });
+      setInitData(result);
+      message.success('游戏初始化数据生成成功！');
+    } catch (error) {
+      message.error((error as Error).message || '生成初始化数据失败');
+    } finally {
+      setGeneratingInit(false);
+    }
+  };
+
+  // 保存初始化数据
+  const handleSaveInit = async () => {
+    if (!roomId || !initData) return;
+    setSaving(true);
+    try {
+      await gameInitAPI.saveInit(roomId, initData);
+      message.success('初始化数据已保存');
+    } catch (error) {
+      message.error((error as Error).message || '保存初始化数据失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleStartGame = async () => {
     if (!roomId) return;
     setSaving(true);
@@ -190,6 +434,7 @@ function HostSetup() {
       setSaving(false);
     }
   };
+
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%', padding: 24 }}>
@@ -205,42 +450,143 @@ function HostSetup() {
           </Tag>
         )}
         {config?.initializationCompleted && <Tag color="green">配置完成</Tag>}
+        <Button icon={<ReloadOutlined />} onClick={loadConfig} loading={loading}>
+          刷新
+        </Button>
       </Space>
 
       <Steps
         current={currentStep}
         items={[
           { title: 'API配置' },
-          { title: '规则与玩家配置' },
+          { title: '规则与玩家' },
+          { title: '游戏初始化' },
           { title: '验证' },
           { title: '完成' },
         ]}
       />
 
-      <Card title="Step 1 - API配置" loading={loading}>
-        <Form form={formApi} layout="vertical" onFinish={handleSaveApi}>
-          <Form.Item label="服务提供商" name="apiProvider">
-            <Input placeholder="例如 openai / custom" />
+      {/* Step 1 - API 配置（简化版） */}
+      <Card title="Step 1 - AI 模型配置" loading={loading}>
+        <Form form={formApi} layout="vertical" onFinish={handleSaveApi} initialValues={{ provider: 'deepseek', streamOutput: false }}>
+          {/* 提供商选择 */}
+          <Form.Item
+            label="AI 服务提供商"
+            name="provider"
+            rules={[{ required: true, message: '请选择提供商' }]}
+          >
+            <Select
+              placeholder="选择 AI 服务提供商"
+              onChange={(value) => setSelectedProvider(value)}
+              options={AI_PROVIDERS.map(p => ({ value: p.id, label: p.name }))}
+            />
           </Form.Item>
-          <Form.Item label="API Endpoint" name="apiEndpoint">
-            <Input placeholder="https://api.example.com/endpoint" />
+
+          {/* 模型选择 */}
+          <Form.Item
+            label="模型"
+            name="model"
+            rules={[{ required: selectedProvider !== 'custom', message: '请选择模型' }]}
+          >
+            {selectedProvider === 'custom' ? (
+              <Input placeholder="输入模型名称，如 gpt-4" />
+            ) : (
+              <Select
+                placeholder="选择模型"
+                options={availableModels.map(m => ({ value: m.id, label: m.name }))}
+              />
+            )}
           </Form.Item>
-          <Form.Item label="Headers (JSON)" name="apiHeaders">
-            <TextArea rows={4} placeholder='{"Authorization":"Bearer xxx"}' />
+
+          {/* API Key 输入 */}
+          <Form.Item
+            label={
+              <Space>
+                API Key
+                <Tooltip title="从对应服务商获取的 API 密钥，用于调用 AI 服务">
+                  <QuestionCircleOutlined style={{ color: '#999' }} />
+                </Tooltip>
+              </Space>
+            }
+            name="apiKey"
+            rules={[{ required: true, message: '请输入 API Key' }]}
+          >
+            <Input.Password
+              placeholder="sk-xxxxxxxxxxxxxxxx"
+              visibilityToggle={{
+                visible: showApiKey,
+                onVisibleChange: setShowApiKey,
+              }}
+              iconRender={(visible) => (visible ? <EyeOutlined /> : <EyeInvisibleOutlined />)}
+            />
           </Form.Item>
-          <Form.Item label="Body 模板 (JSON)" name="apiBodyTemplate">
-            <TextArea rows={4} placeholder='{"prompt":"...","params":{}}' />
+
+          {/* API Endpoint（自定义时显示） */}
+          <Form.Item
+            label="API Endpoint"
+            name="endpoint"
+            rules={[{ required: true, message: '请输入 API 地址' }]}
+            hidden={selectedProvider !== 'custom'}
+          >
+            <Input placeholder="https://api.example.com/v1/chat/completions" />
           </Form.Item>
+
+          {/* 流式输出开关 */}
+          <Form.Item
+            label={
+              <Space>
+                流式输出
+                <Tooltip title="开启后 AI 响应会逐字显示，但目前后端暂不支持，建议关闭">
+                  <QuestionCircleOutlined style={{ color: '#999' }} />
+                </Tooltip>
+              </Space>
+            }
+            name="streamOutput"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="开" unCheckedChildren="关" />
+          </Form.Item>
+
+          {/* 高级配置（折叠） */}
+          {selectedProvider === 'custom' && (
+            <Collapse ghost style={{ marginBottom: 16 }}>
+              <Panel header="高级配置（可选）" key="advanced">
+                <Form.Item label="自定义 Headers (JSON)" name="customHeaders">
+                  <TextArea rows={3} placeholder='{"X-Custom-Header": "value"}' />
+                </Form.Item>
+                <Form.Item label="自定义 Body 模板 (JSON)" name="customBodyTemplate">
+                  <TextArea rows={4} placeholder='使用 {{prompt}} 作为占位符' />
+                </Form.Item>
+              </Panel>
+            </Collapse>
+          )}
+
           <Button type="primary" htmlType="submit" loading={saving}>
             保存 API 配置
           </Button>
         </Form>
+
+        {/* 配置提示 */}
+        <Alert
+          message="配置说明"
+          description={
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>推荐使用 DeepSeek，性价比高且效果好</li>
+              <li>API Key 请从对应服务商官网获取</li>
+              <li>流式输出目前后端暂不支持，建议保持关闭</li>
+            </ul>
+          }
+          type="info"
+          showIcon
+          style={{ marginTop: 16 }}
+        />
       </Card>
 
+      {/* Step 2 - 规则与玩家配置 */}
       <Card title="Step 2 - 规则与玩家配置" loading={loading}>
         <Form form={formRules} layout="vertical" onFinish={handleSaveRules}>
           <Form.Item label="游戏规则 (Markdown 可选)" name="gameRules">
-            <TextArea rows={4} placeholder="在此描述游戏规则..." />
+            <TextArea rows={4} placeholder="在此描述游戏规则，留空则使用默认的《凡墙皆是门》蓝本规则..." />
           </Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" loading={saving}>
@@ -256,32 +602,37 @@ function HostSetup() {
             label="总决策主体数"
             name="totalDecisionEntities"
             rules={[{ required: true, message: '请输入总主体数' }]}
+            tooltip="游戏中参与决策的企业/角色总数"
           >
-            <InputNumber min={1} placeholder="请输入..." />
+            <InputNumber min={2} max={10} placeholder="2-10" style={{ width: 120 }} />
           </Form.Item>
           <Form.Item
             label="人类玩家数"
             name="humanPlayerCount"
             rules={[{ required: true, message: '请输入人类玩家数' }]}
           >
-            <InputNumber min={0} placeholder="请输入..." />
+            <InputNumber min={1} placeholder="请输入..." style={{ width: 120 }} />
           </Form.Item>
           <Form.Item
             label="AI玩家数"
             name="aiPlayerCount"
             rules={[{ required: true, message: '请输入AI玩家数' }]}
           >
-            <InputNumber min={0} placeholder="请输入..." />
+            <InputNumber min={0} placeholder="请输入..." style={{ width: 120 }} />
           </Form.Item>
           <Form.Item
             label="决策时限(分钟)"
             name="decisionTimeLimit"
             rules={[{ required: true, message: '请输入决策时限' }]}
           >
-            <InputNumber min={1} placeholder="请输入..." />
+            <InputNumber min={1} max={30} placeholder="1-30" style={{ width: 120 }} />
           </Form.Item>
           <Form.Item label="超时策略" name="timeoutStrategy">
-            <Input placeholder="auto_submit / skip / extend 等" />
+            <Select placeholder="选择超时策略" style={{ width: 200 }}>
+              <Select.Option value="auto_submit">自动提交（推荐）</Select.Option>
+              <Select.Option value="skip">跳过本回合</Select.Option>
+              <Select.Option value="extend">延长时间</Select.Option>
+            </Select>
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={saving}>
             保存玩家配置
@@ -289,7 +640,185 @@ function HostSetup() {
         </Form>
       </Card>
 
-      <Card title="Step 3 - 验证与完成" loading={loading}>
+
+      {/* Step 3 - 游戏初始化 */}
+      <Card title="Step 3 - 游戏初始化（AI生成）" loading={loading}>
+        <Alert
+          message="游戏初始化向导"
+          description="配置初始参数后，AI 将自动生成商业背景故事、主体初始状态、年度卦象和初始决策选项。"
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+        
+        <Form form={formInit} layout="vertical" onFinish={handleGenerateInit}>
+          <Form.Item
+            label="初始资金（元）"
+            name="initialCash"
+            rules={[{ required: true, message: '请输入初始资金' }]}
+            initialValue={1000000}
+          >
+            <InputNumber
+              min={10000}
+              step={100000}
+              style={{ width: '100%' }}
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            />
+          </Form.Item>
+          <Form.Item
+            label="游戏模式"
+            name="gameMode"
+            rules={[{ required: true, message: '请选择游戏模式' }]}
+            initialValue="multi_control"
+          >
+            <Select>
+              <Select.Option value="multi_control">多主体操控模式（所有主体由玩家控制）</Select.Option>
+              <Select.Option value="single_protagonist">单主角模式（玩家控制一个主体）</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item label="行业主题（可选）" name="industryTheme">
+            <Input placeholder="如：科技、零售、制造、金融..." />
+          </Form.Item>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              icon={<RocketOutlined />}
+              loading={generatingInit}
+              disabled={!config?.totalDecisionEntities || config.totalDecisionEntities < 2}
+            >
+              {generatingInit ? '正在生成...' : '生成初始化数据'}
+            </Button>
+            {initData && (
+              <Button icon={<SaveOutlined />} onClick={handleSaveInit} loading={saving}>
+                保存初始化数据
+              </Button>
+            )}
+            {initData && (
+              <Button icon={<ReloadOutlined />} onClick={() => setInitData(null)}>
+                重新生成
+              </Button>
+            )}
+          </Space>
+        </Form>
+
+        {generatingInit && (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin size="large" />
+            <Paragraph style={{ marginTop: 16 }}>AI 正在生成游戏初始化数据，请稍候...</Paragraph>
+          </div>
+        )}
+
+        {initData && !generatingInit && (
+          <div style={{ marginTop: 24 }}>
+            <Divider>生成结果预览</Divider>
+            
+            <Collapse defaultActiveKey={['story', 'entities']}>
+              <Panel header="商业背景故事" key="story">
+                <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
+                  {initData.backgroundStory}
+                </Paragraph>
+              </Panel>
+              
+              <Panel header={`主体初始状态（${initData.entities.length}个）`} key="entities">
+                <Table
+                  dataSource={initData.entities}
+                  rowKey="id"
+                  pagination={false}
+                  size="small"
+                  columns={[
+                    { title: 'ID', dataIndex: 'id', width: 60 },
+                    { title: '名称', dataIndex: 'name', width: 120 },
+                    {
+                      title: '初始资金',
+                      dataIndex: 'cash',
+                      render: (v: number) => `¥${v.toLocaleString()}`,
+                    },
+                    {
+                      title: '被动收入',
+                      dataIndex: 'passiveIncome',
+                      render: (v: number) => `+¥${v.toLocaleString()}`,
+                    },
+                    {
+                      title: '被动支出',
+                      dataIndex: 'passiveExpense',
+                      render: (v: number) => `-¥${v.toLocaleString()}`,
+                    },
+                    {
+                      title: '属性',
+                      dataIndex: 'attributes',
+                      render: (attrs: Record<string, number>) =>
+                        Object.entries(attrs || {})
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join(', '),
+                    },
+                  ]}
+                />
+              </Panel>
+              
+              <Panel header="年度卦象" key="hexagram">
+                <Space direction="vertical">
+                  <Text strong>
+                    {initData.yearlyHexagram.name}
+                    <Tag
+                      color={
+                        initData.yearlyHexagram.omen === 'positive'
+                          ? 'green'
+                          : initData.yearlyHexagram.omen === 'negative'
+                          ? 'red'
+                          : 'default'
+                      }
+                      style={{ marginLeft: 8 }}
+                    >
+                      {initData.yearlyHexagram.omen === 'positive'
+                        ? '吉'
+                        : initData.yearlyHexagram.omen === 'negative'
+                        ? '凶'
+                        : '中'}
+                    </Tag>
+                  </Text>
+                  <Text type="secondary">
+                    爻象：{initData.yearlyHexagram.lines.join(' ')}
+                  </Text>
+                  <Paragraph>{initData.yearlyHexagram.text}</Paragraph>
+                  {initData.yearlyHexagram.yearlyTheme && (
+                    <Text>年度主题：{initData.yearlyHexagram.yearlyTheme}</Text>
+                  )}
+                </Space>
+              </Panel>
+              
+              <Panel header="初始决策选项" key="options">
+                {initData.initialOptions.map((opt) => (
+                  <Card key={opt.id} size="small" style={{ marginBottom: 8 }}>
+                    <Text strong>
+                      {opt.id}. {opt.title}
+                    </Text>
+                    <Paragraph type="secondary" style={{ margin: '4px 0' }}>
+                      {opt.description}
+                    </Paragraph>
+                    {opt.expectedDelta && (
+                      <Space>
+                        {Object.entries(opt.expectedDelta).map(([k, v]) => (
+                          <Tag key={k} color={v >= 0 ? 'green' : 'red'}>
+                            {k}: {v >= 0 ? '+' : ''}{v}
+                          </Tag>
+                        ))}
+                      </Space>
+                    )}
+                  </Card>
+                ))}
+              </Panel>
+              
+              <Panel header="资金公式" key="formula">
+                <Text code>{initData.cashFormula}</Text>
+              </Panel>
+            </Collapse>
+          </div>
+        )}
+      </Card>
+
+      {/* Step 4 - 验证与完成 */}
+      <Card title="Step 4 - 验证与完成" loading={loading}>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <div>
             <Text strong>当前状态：</Text>
@@ -327,9 +856,19 @@ function HostSetup() {
         </Space>
       </Card>
 
-      <Card title="当前配置快照">
+      {/* 配置快照 */}
+      <Card
+        title="当前配置快照"
+        extra={
+          <Button size="small" icon={<ReloadOutlined />} onClick={loadConfig}>
+            刷新快照
+          </Button>
+        }
+      >
         {config ? (
-          <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(config, null, 2)}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto', fontSize: 12 }}>
+            {JSON.stringify(config, null, 2)}
+          </pre>
         ) : (
           <Text type="secondary">尚未加载配置</Text>
         )}

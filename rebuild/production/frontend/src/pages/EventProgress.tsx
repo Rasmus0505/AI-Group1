@@ -7,7 +7,6 @@ import {
   Tag,
   Typography,
   Space,
-  Timeline,
   Alert,
   Spin,
   message,
@@ -19,7 +18,7 @@ import { wsService } from '../services/websocket';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 interface ActiveEvent {
   id: string;

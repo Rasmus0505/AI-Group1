@@ -91,19 +91,21 @@ router.post('/test/ai', async (req, res) => {
       });
 
       if (!hostConfig) {
-        return res.status(404).json({
+        res.status(404).json({
           status: 'error',
           message: '房间配置不存在',
           hint: '请先完成主持人配置',
         });
+        return;
       }
 
       if (!hostConfig.apiEndpoint) {
-        return res.status(400).json({
+        res.status(400).json({
           status: 'error',
           message: 'API配置不完整',
           hint: '请先配置API端点',
         });
+        return;
       }
 
       config = {
@@ -121,11 +123,12 @@ router.post('/test/ai', async (req, res) => {
         bodyTemplate: apiBodyTemplate || undefined,
       };
     } else {
-      return res.status(400).json({
+      res.status(400).json({
         status: 'error',
         message: '缺少必要参数',
         hint: '请提供 roomId 或 apiEndpoint',
       });
+      return;
     }
 
     // 执行测试调用

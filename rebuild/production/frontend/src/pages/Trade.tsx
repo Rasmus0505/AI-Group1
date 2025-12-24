@@ -13,7 +13,6 @@ import {
   message,
   Typography,
   Divider,
-  Alert,
 } from 'antd';
 import {
   SwapOutlined,
@@ -26,6 +25,7 @@ import {
 import { getTradeList, requestTrade, respondToTrade, cancelTrade, Trade } from '../services/trade';
 import { useAuthStore } from '../stores/authStore';
 import { useSocket } from '../hooks/useSocket';
+import { wsService } from '../services/websocket';
 
 const { Title, Text } = Typography;
 
@@ -37,7 +37,7 @@ const TradePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [requestModalVisible, setRequestModalVisible] = useState(false);
   const [form] = Form.useForm();
-  const { socket, connected } = useSocket();
+  const socketStatus = useSocket();
 
   useEffect(() => {
     if (!sessionId) return;
@@ -45,7 +45,7 @@ const TradePage: React.FC = () => {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!sessionId || !wsService.connected) return;
+    if (!sessionId || socketStatus !== 'connected') return;
 
     const handleTradeRequested = (data: any) => {
       message.info(`收到交易请求：${data.initiator.nickname || data.initiator.username} 向您发起交易`);

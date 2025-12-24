@@ -146,20 +146,84 @@ export class AIService {
     }
 
     // 推演要求：引导输出蓝本要求的结构
-    prompt += '## 推演要求（输出需贴合 TurnResultDTO，且 narrative 时间节奏按季度）\n';
-    prompt += '请根据以上信息进行推演，生成结果并确保以下字段可被前端直接消费：\n';
-    prompt += '1. Narrative：描述本回合（季度）的关键事件与因果链路，叙事中应包含 events 的 keyword。\n';
-    prompt += '2. Hexagram：给出本回合的卦象 { name, omen(positive|neutral|negative), lines[6], text, colorHint }，用于顶部卦象组件；可省略动画。\n';
-    prompt += '3. Ledger：财务核算中心字段 { startingCash, passiveIncome, passiveExpense, decisionCost, balance }，区分持续性被动收支与一次性决策成本。\n';
-    prompt += '4. EntityPanels：逐个主体给出属性面板，包括 id、名称、现金、市场份额、品牌声誉、创新、被动收入/支出、delta 变化、是否破产；如有信用评级和配色，可提供 creditRating / paletteKey / accentColor。主体数量由房间配置决定，不要假定固定 ABCD；标识符不要使用 emoji。\n';
-    prompt += '5. Leaderboard：按综合得分给出名次与分数，标注 rankChange。\n';
-    prompt += '6. Options：给出 3 个策略选项 { id,title,description,expectedDelta }，expectedDelta 用于显示资源变动预期；可追加玩家自定义输入框不替代。\n';
-    prompt += '7. 风险/机会/效益：riskCard / opportunityCard / benefitCard 三张卡片的简短总结。\n';
-    prompt += '8. Achievements：列出本回合解锁的成就（指明主体与触发原因）。\n';
-    prompt += '9. BranchingNarratives：可选，若有多线分支决策，提供字符串数组保留分支线索。\n';
-    prompt += '10. NextRoundHints：仅提示方向，不代替玩家决策。\n';
-    prompt += '11. 现金流安全：若余额接近被动支出临界，请在 riskCard 或 events 中明确警示。\n';
-    prompt += '\n请以 JSON 为主进行输出，字段名需与上述一致（若服务端已启用 JSON Mode，可直接输出对象）。\n';
+    prompt += '## 推演要求\n';
+    prompt += '请根据以上信息进行推演，**必须以 JSON 格式输出**，确保可被前端直接解析。\n\n';
+    prompt += '### 输出 JSON Schema:\n';
+    prompt += '```json\n';
+    prompt += '{\n';
+    prompt += '  "roundTitle": "第X回合：20XX年上/下半年",\n';
+    prompt += '  "narrative": "叙事文本，描述本回合关键事件与因果链路，时间节奏按季度/半年",\n';
+    prompt += '  "events": [\n';
+    prompt += '    {\n';
+    prompt += '      "keyword": "事件关键词",\n';
+    prompt += '      "type": "positive|negative|neutral",\n';
+    prompt += '      "description": "事件描述",\n';
+    prompt += '      "affectedEntities": ["A", "B"],\n';
+    prompt += '      "isLongTerm": false,\n';
+    prompt += '      "remainingRounds": 0\n';
+    prompt += '    }\n';
+    prompt += '  ],\n';
+    prompt += '  "perEntityPanel": [\n';
+    prompt += '    {\n';
+    prompt += '      "id": "A",\n';
+    prompt += '      "name": "主体中文名称",\n';
+    prompt += '      "cash": 1000000,\n';
+    prompt += '      "attributes": { "市场份额": 25, "品牌声誉": 70, "创新能力": 60 },\n';
+    prompt += '      "passiveIncome": 50000,\n';
+    prompt += '      "passiveExpense": 30000,\n';
+    prompt += '      "delta": { "cash": 20000, "市场份额": 2 },\n';
+    prompt += '      "broken": false,\n';
+    prompt += '      "achievementsUnlocked": [],\n';
+    prompt += '      "intelConfidence": 1.0\n';
+    prompt += '    }\n';
+    prompt += '  ],\n';
+    prompt += '  "leaderboard": [\n';
+    prompt += '    { "id": "A", "name": "名称", "score": 100, "rank": 1, "rankChange": 0 }\n';
+    prompt += '  ],\n';
+    prompt += '  "hexagram": {\n';
+    prompt += '    "name": "卦名",\n';
+    prompt += '    "omen": "positive|neutral|negative",\n';
+    prompt += '    "lines": ["yang", "yin", "yang", "yang", "yin", "yang"],\n';
+    prompt += '    "text": "象曰/解释文本"\n';
+    prompt += '  },\n';
+    prompt += '  "ledger": {\n';
+    prompt += '    "startingCash": 1000000,\n';
+    prompt += '    "passiveIncome": 50000,\n';
+    prompt += '    "passiveExpense": 30000,\n';
+    prompt += '    "decisionCost": 10000,\n';
+    prompt += '    "balance": 1010000\n';
+    prompt += '  },\n';
+    prompt += '  "options": [\n';
+    prompt += '    {\n';
+    prompt += '      "id": "1",\n';
+    prompt += '      "title": "选项标题",\n';
+    prompt += '      "description": "选项描述",\n';
+    prompt += '      "expectedDelta": { "cash": -50000, "市场份额": 5 },\n';
+    prompt += '      "category": "attack|defense|cooperation|explore|trade",\n';
+    prompt += '      "riskLevel": "low|medium|high"\n';
+    prompt += '    }\n';
+    prompt += '  ],\n';
+    prompt += '  "riskCard": "企业风险简评",\n';
+    prompt += '  "opportunityCard": "企业机会简评",\n';
+    prompt += '  "benefitCard": "当前效益简评",\n';
+    prompt += '  "achievements": [\n';
+    prompt += '    { "id": "ach_1", "entityId": "A", "title": "成就标题", "description": "成就描述", "triggerReason": "触发原因" }\n';
+    prompt += '  ],\n';
+    prompt += '  "branchingNarratives": ["分支线索1", "分支线索2"],\n';
+    prompt += '  "nextRoundHints": "下回合提示（仅提示方向，不代替玩家决策）",\n';
+    prompt += '  "cashFlowWarning": [\n';
+    prompt += '    { "entityId": "B", "message": "现金流警告信息", "severity": "warning|critical" }\n';
+    prompt += '  ]\n';
+    prompt += '}\n';
+    prompt += '```\n\n';
+    prompt += '### 关键要求:\n';
+    prompt += '1. **必须输出有效 JSON**，用 ```json 代码块包裹\n';
+    prompt += '2. narrative 中应包含 events 的 keyword，便于前端高亮\n';
+    prompt += '3. perEntityPanel 数量必须与房间配置的主体数量一致\n';
+    prompt += '4. 未收到指令的主体只结算被动收支，不触发主动事件\n';
+    prompt += '5. 若余额接近被动支出临界，必须在 cashFlowWarning 中警示\n';
+    prompt += '6. options 提供 3 个策略选项，附带 expectedDelta 预期变动\n';
+    prompt += '7. 主体 id 使用 A/B/C/D，不要使用 emoji\n';
 
     logger.info(`Prompt built successfully`, {
       promptLength: prompt.length,
@@ -277,7 +341,7 @@ export class AIService {
     }
 
     // 构建请求体
-    const requestBody = this.buildRequestBody(config, prompt);
+    let requestBody = this.buildRequestBody(config, prompt);
     logger.info(`Prepared request body for AI API call`, {
       endpoint: config.endpoint,
       provider: config.provider,
@@ -482,17 +546,99 @@ export class AIService {
 
   /**
    * 解析文本格式的推演结果
+   * 支持从 AI 响应中提取 JSON 格式的 TurnResultDTO
    */
   private parseNarrativeResponse(content: string): InferenceResult['result'] {
-    // 简单的文本解析逻辑
-    // 实际项目中可以使用更复杂的解析，比如JSON提取、Markdown解析等
+    // 尝试提取 JSON 块
+    const jsonPatterns = [
+      /```json\s*([\s\S]*?)```/i,  // Markdown JSON 代码块
+      /```\s*([\s\S]*?)```/,       // 普通代码块
+      /(\{[\s\S]*\})/,             // 直接 JSON 对象
+    ];
 
+    for (const pattern of jsonPatterns) {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        try {
+          const jsonStr = match[1].trim();
+          const parsed = JSON.parse(jsonStr);
+          
+          // 验证是否包含必要字段
+          if (parsed && typeof parsed === 'object') {
+            logger.info(`Successfully parsed JSON from AI response`, {
+              hasNarrative: !!parsed.narrative,
+              hasPerEntityPanel: Array.isArray(parsed.perEntityPanel),
+              hasLeaderboard: Array.isArray(parsed.leaderboard),
+              hasHexagram: !!parsed.hexagram,
+              hasOptions: Array.isArray(parsed.options),
+              parsedKeys: Object.keys(parsed),
+            });
+            
+            // 返回完整的解析结果，映射到 InferenceResult['result'] 格式
+            return {
+              narrative: parsed.narrative || content,
+              outcomes: this.mapEntityPanelsToOutcomes(parsed.perEntityPanel),
+              events: this.mapTurnEvents(parsed.events),
+              nextRoundHints: parsed.nextRoundHints,
+              // 保留完整的解析数据供前端使用
+              ...parsed,
+            };
+          }
+        } catch (parseError: any) {
+          logger.warn(`Failed to parse JSON from AI response`, {
+            error: parseError.message,
+            jsonPreview: match[1]?.substring(0, 200),
+          });
+        }
+      }
+    }
+
+    // 如果无法解析 JSON，返回原始文本
+    logger.info(`No valid JSON found in AI response, returning raw narrative`);
     return {
       narrative: content,
-      // 可以尝试从文本中提取结构化信息
       outcomes: [],
       events: [],
     };
+  }
+
+  /**
+   * 将 perEntityPanel 映射为 outcomes 格式（向后兼容）
+   */
+  private mapEntityPanelsToOutcomes(panels: any[] | undefined): Array<{
+    playerIndex: number;
+    outcome: string;
+    resources?: Record<string, unknown>;
+  }> {
+    if (!Array.isArray(panels)) return [];
+    
+    return panels.map((panel, index) => ({
+      playerIndex: index,
+      outcome: panel.broken 
+        ? `${panel.name} 已破产: ${panel.bankruptReason || '现金流断裂'}` 
+        : `${panel.name} 当前现金: ${panel.cash}`,
+      resources: {
+        cash: panel.cash,
+        ...panel.attributes,
+        passiveIncome: panel.passiveIncome,
+        passiveExpense: panel.passiveExpense,
+      },
+    }));
+  }
+
+  /**
+   * 将 TurnEvent[] 映射为旧格式（向后兼容）
+   */
+  private mapTurnEvents(events: any[] | undefined): Array<{
+    type: string;
+    description: string;
+  }> {
+    if (!Array.isArray(events)) return [];
+    
+    return events.map(event => ({
+      type: event.type || 'neutral',
+      description: event.description || event.keyword || '',
+    }));
   }
 
   /**
@@ -681,6 +827,225 @@ export class AIService {
       // Return empty array on error, don't throw
       return [];
     }
+  }
+
+  /**
+   * 游戏初始化 - 生成背景故事、主体初始状态、年度卦象等
+   */
+  async initializeGame(
+    config: AIConfig,
+    initConfig: {
+      entityCount: number;
+      gameMode: 'multi_control' | 'single_protagonist';
+      protagonistId?: string;
+      initialCash: number;
+      gameRules?: string;
+      industryTheme?: string; // 行业主题（如：科技、零售、制造）
+    }
+  ): Promise<{
+    backgroundStory: string;
+    entities: Array<{
+      id: string;
+      name: string;
+      cash: number;
+      attributes: Record<string, number>;
+      passiveIncome: number;
+      passiveExpense: number;
+      backstory?: string;
+    }>;
+    yearlyHexagram: {
+      name: string;
+      omen: 'positive' | 'neutral' | 'negative';
+      lines: Array<'yang' | 'yin'>;
+      text: string;
+      yearlyTheme?: string;
+    };
+    initialOptions: Array<{
+      id: string;
+      title: string;
+      description: string;
+      expectedDelta?: Record<string, number>;
+    }>;
+    cashFormula: string;
+  }> {
+    const entityIds = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, initConfig.entityCount).split('');
+    
+    let prompt = `# 游戏初始化请求\n\n`;
+    
+    prompt += `## 配置参数\n`;
+    prompt += `- 主体数量: ${initConfig.entityCount}\n`;
+    prompt += `- 游戏模式: ${initConfig.gameMode === 'multi_control' ? '多主体操控模式' : '单主角模式'}\n`;
+    if (initConfig.protagonistId) {
+      prompt += `- 主角ID: ${initConfig.protagonistId}\n`;
+    }
+    prompt += `- 初始资金: ${initConfig.initialCash.toLocaleString()} 元\n`;
+    if (initConfig.industryTheme) {
+      prompt += `- 行业主题: ${initConfig.industryTheme}\n`;
+    }
+    prompt += `\n`;
+
+    if (initConfig.gameRules) {
+      prompt += `## 游戏规则\n${initConfig.gameRules}\n\n`;
+    }
+
+    prompt += `## 初始化任务\n`;
+    prompt += `请根据《凡墙皆是门》游戏蓝本，完成以下初始化工作：\n\n`;
+    prompt += `1. **商业背景故事**（约600字）：\n`;
+    prompt += `   - 用自然段落写小说故事，描述 ${initConfig.entityCount} 个企业之间的博弈背景\n`;
+    prompt += `   - 故事中不要讲卦象\n`;
+    prompt += `   - 各企业之间要有联系和竞争关系\n\n`;
+    prompt += `2. **主体初始状态**：\n`;
+    prompt += `   - 为每个主体生成中文名称（如：蓝鲸工业、红隼贸易）\n`;
+    prompt += `   - 设定初始属性：市场份额、品牌声誉、创新能力等\n`;
+    prompt += `   - 设定被动收入和被动支出（确保净损益为正）\n\n`;
+    prompt += `3. **年度卦象**：\n`;
+    prompt += `   - 随机生成一个周易卦象\n`;
+    prompt += `   - 提供卦名、六爻、象曰解释\n`;
+    prompt += `   - 生成年度叙事暗线（影响事件风格）\n\n`;
+    prompt += `4. **初始决策选项**：\n`;
+    prompt += `   - 为玩家提供 3 个初始决策选项\n`;
+    prompt += `   - 每个选项附带预期资源变动\n\n`;
+    prompt += `5. **资金变动公式**：\n`;
+    prompt += `   - 简要说明资金计算规则\n\n`;
+
+    prompt += `## 输出格式（必须为 JSON）\n`;
+    prompt += '```json\n';
+    prompt += '{\n';
+    prompt += '  "backgroundStory": "商业背景故事（约600字）",\n';
+    prompt += '  "entities": [\n';
+    entityIds.forEach((id, index) => {
+      prompt += `    {\n`;
+      prompt += `      "id": "${id}",\n`;
+      prompt += `      "name": "主体${id}的中文名称",\n`;
+      prompt += `      "cash": ${initConfig.initialCash},\n`;
+      prompt += `      "attributes": { "市场份额": 25, "品牌声誉": 70, "创新能力": 60 },\n`;
+      prompt += `      "passiveIncome": 50000,\n`;
+      prompt += `      "passiveExpense": 30000,\n`;
+      prompt += `      "backstory": "主体背景简介"\n`;
+      prompt += `    }${index < entityIds.length - 1 ? ',' : ''}\n`;
+    });
+    prompt += '  ],\n';
+    prompt += '  "yearlyHexagram": {\n';
+    prompt += '    "name": "卦名",\n';
+    prompt += '    "omen": "positive|neutral|negative",\n';
+    prompt += '    "lines": ["yang", "yin", "yang", "yang", "yin", "yang"],\n';
+    prompt += '    "text": "象曰/解释文本",\n';
+    prompt += '    "yearlyTheme": "年度叙事暗线"\n';
+    prompt += '  },\n';
+    prompt += '  "initialOptions": [\n';
+    prompt += '    { "id": "1", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -50000 } },\n';
+    prompt += '    { "id": "2", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -30000 } },\n';
+    prompt += '    { "id": "3", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -20000 } }\n';
+    prompt += '  ],\n';
+    prompt += '  "cashFormula": "资金变动公式说明"\n';
+    prompt += '}\n';
+    prompt += '```\n';
+
+    try {
+      logger.info(`Initializing game with ${initConfig.entityCount} entities`, {
+        gameMode: initConfig.gameMode,
+        initialCash: initConfig.initialCash,
+      });
+
+      const result = await this.callAI(config, prompt);
+
+      // 解析结果
+      if (result.narrative) {
+        const jsonPatterns = [
+          /```json\s*([\s\S]*?)```/i,
+          /```\s*([\s\S]*?)```/,
+          /(\{[\s\S]*"backgroundStory"[\s\S]*\})/,
+        ];
+
+        for (const pattern of jsonPatterns) {
+          const match = result.narrative.match(pattern);
+          if (match && match[1]) {
+            try {
+              const parsed = JSON.parse(match[1].trim());
+              if (parsed.backgroundStory && parsed.entities) {
+                logger.info(`Game initialization successful`, {
+                  entitiesCount: parsed.entities.length,
+                  hasHexagram: !!parsed.yearlyHexagram,
+                  hasOptions: Array.isArray(parsed.initialOptions),
+                });
+                return parsed;
+              }
+            } catch (parseError: any) {
+              logger.warn(`Failed to parse game init JSON`, { error: parseError.message });
+            }
+          }
+        }
+      }
+
+      // 如果解析失败，返回默认值
+      logger.warn(`Failed to parse game initialization result, using defaults`);
+      return this.getDefaultGameInit(initConfig);
+    } catch (error: any) {
+      logger.error(`Game initialization failed`, { error: error.message });
+      return this.getDefaultGameInit(initConfig);
+    }
+  }
+
+  /**
+   * 获取默认的游戏初始化数据（AI 调用失败时的回退）
+   */
+  private getDefaultGameInit(initConfig: {
+    entityCount: number;
+    initialCash: number;
+  }): {
+    backgroundStory: string;
+    entities: Array<{
+      id: string;
+      name: string;
+      cash: number;
+      attributes: Record<string, number>;
+      passiveIncome: number;
+      passiveExpense: number;
+    }>;
+    yearlyHexagram: {
+      name: string;
+      omen: 'positive' | 'neutral' | 'negative';
+      lines: Array<'yang' | 'yin'>;
+      text: string;
+    };
+    initialOptions: Array<{
+      id: string;
+      title: string;
+      description: string;
+      expectedDelta?: Record<string, number>;
+    }>;
+    cashFormula: string;
+  } {
+    const defaultNames = ['蓝鲸工业', '红隼贸易', '青龙科技', '白虎物流', '玄武金融', '朱雀传媒'];
+    const entityIds = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, initConfig.entityCount).split('');
+
+    return {
+      backgroundStory: `在这个充满机遇与挑战的商业世界中，${initConfig.entityCount}家企业正在展开激烈的市场竞争。每家企业都有自己独特的优势和战略方向，它们在市场份额、品牌声誉和创新能力等方面各有千秋。随着市场环境的不断变化，这些企业需要做出明智的决策，以在竞争中脱颖而出。`,
+      entities: entityIds.map((id, index) => ({
+        id,
+        name: defaultNames[index] || `企业${id}`,
+        cash: initConfig.initialCash,
+        attributes: {
+          '市场份额': Math.floor(100 / initConfig.entityCount),
+          '品牌声誉': 50 + Math.floor(Math.random() * 30),
+          '创新能力': 50 + Math.floor(Math.random() * 30),
+        },
+        passiveIncome: Math.floor(initConfig.initialCash * 0.05),
+        passiveExpense: Math.floor(initConfig.initialCash * 0.03),
+      })),
+      yearlyHexagram: {
+        name: '乾卦',
+        omen: 'positive' as const,
+        lines: ['yang', 'yang', 'yang', 'yang', 'yang', 'yang'] as Array<'yang' | 'yin'>,
+        text: '天行健，君子以自强不息。',
+      },
+      initialOptions: [
+        { id: '1', title: '扩大市场', description: '投入资金扩大市场份额', expectedDelta: { cash: -50000, '市场份额': 5 } },
+        { id: '2', title: '研发创新', description: '投入研发提升创新能力', expectedDelta: { cash: -30000, '创新能力': 10 } },
+        { id: '3', title: '品牌建设', description: '投入品牌营销提升声誉', expectedDelta: { cash: -20000, '品牌声誉': 8 } },
+      ],
+      cashFormula: '期末现金 = 期初现金 + 被动收入 - 被动支出 + 决策收益 - 决策成本',
+    };
   }
 }
 

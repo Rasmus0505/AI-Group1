@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/authStore';
 const { Title, Paragraph, Text } = Typography;
 
 function Login() {
-  const { user, login } = useAuthStore();
+  const { user, login, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(false);
