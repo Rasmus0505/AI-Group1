@@ -215,6 +215,48 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
       throw new AppError('主持人配置未完成，无法开始游戏', 400);
     }
 
+    // 从 Redis 获取游戏初始化数据
+    const initKey = `game:init:${roomId}`;
+    const initDataStr = await redis.get(initKey);
+    let gameInitData: any = null;
+    if (initDataStr) {
+      try {
+        gameInitData = JSON.parse(initDataStr);
+        logger.info(`Loaded game init data for room ${roomId} at game start`, {
+          hasBackgroundStory: !!gameInitData?.backgroundStory,
+          entitiesCount: gameInitData?.entities?.length || 0,
+          hasHexagram: !!gameInitData?.yearlyHexagram,
+        });
+      } catch (e) {
+        logger.warn(`Failed to parse game init data for room ${roomId}`, { error: e });
+      }
+    }
+
+    // 检查初始化数据是否存在且完整
+    if (!gameInitData || !gameInitData.backgroundStory || !gameInitData.entities || gameInitData.entities.length === 0) {
+      throw new AppError('游戏初始化数据不存在或已过期，请主持人重新生成并保存初始化数据', 400);
+    }
+
+    // 构建初始 gameState（包含初始化数据）
+    const initialGameState = gameInitData ? {
+      backgroundStory: gameInitData.backgroundStory,
+      entities: gameInitData.entities,
+      yearlyHexagram: gameInitData.yearlyHexagram,
+      initialOptions: gameInitData.initialOptions,
+      cashFormula: gameInitData.cashFormula,
+      currentHexagram: gameInitData.yearlyHexagram, // 当前卦象初始为年度卦象
+      players: gameInitData.entities?.map((entity: any, index: number) => ({
+        id: entity.id,
+        name: entity.name,
+        cash: entity.cash,
+        attributes: entity.attributes || {},
+        passiveIncome: entity.passiveIncome || 0,
+        passiveExpense: entity.passiveExpense || 0,
+        backstory: entity.backstory,
+        playerIndex: index,
+      })) || [],
+    } : null;
+
     // 如果已存在会话且处于进行中，直接返回
     let session = await prisma.gameSession.findUnique({ where: { roomId } });
     const now = new Date();
@@ -229,18 +271,36 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
           roundStatus: 'decision',
           status: 'playing',
           decisionDeadline: deadline,
+          gameState: initialGameState as any, // 写入初始化数据
         },
       });
     } else if (session.status !== 'playing') {
       // 重新开始或继续游戏时，重置到决策阶段
+      // 如果 gameState 为空，则写入初始化数据
       session = await prisma.gameSession.update({
         where: { id: session.id },
         data: {
           status: 'playing',
           roundStatus: 'decision',
           decisionDeadline: deadline,
+          ...(session.gameState ? {} : { gameState: initialGameState as any }),
         },
       });
+    } else {
+      // 会话已存在且正在进行中，检查是否需要更新 deadline
+      // 如果当前是决策阶段且 deadline 已过期或为空，则更新 deadline
+      if (session.roundStatus === 'decision') {
+        const currentDeadline = session.decisionDeadline ? new Date(session.decisionDeadline) : null;
+        if (!currentDeadline || currentDeadline < now) {
+          // deadline 已过期或为空，更新为新的 deadline
+          session = await prisma.gameSession.update({
+            where: { id: session.id },
+            data: {
+              decisionDeadline: deadline,
+            },
+          });
+        }
+      }
     }
 
     // 标记房间状态为 playing
@@ -1531,6 +1591,25 @@ router.post(
         orderBy: { createdAt: 'asc' },
       });
 
+      // 从 Redis 获取游戏初始化数据
+      const initKey = `game:init:${session.roomId}`;
+      const initDataStr = await redis.get(initKey);
+      let gameInitData = null;
+      if (initDataStr) {
+        try {
+          gameInitData = JSON.parse(initDataStr);
+          logger.info(`Loaded game init data for room ${session.roomId}`, {
+            hasBackgroundStory: !!gameInitData?.backgroundStory,
+            entitiesCount: gameInitData?.entities?.length || 0,
+            hasHexagram: !!gameInitData?.yearlyHexagram,
+          });
+        } catch (e) {
+          logger.warn(`Failed to parse game init data for room ${session.roomId}`, { error: e });
+        }
+      } else {
+        logger.warn(`No game init data found for room ${session.roomId}`);
+      }
+
       // 构建推演数据
       const inferenceData = {
         sessionId,
@@ -1556,6 +1635,12 @@ router.post(
         })),
         gameRules: hostConfig.gameRules || '',
         currentRound: session.currentRound,
+        // 传入游戏初始化数据（主体名称、背景故事、卦象等）
+        gameInitData: gameInitData ? {
+          backgroundStory: gameInitData.backgroundStory,
+          entities: gameInitData.entities,
+          yearlyHexagram: gameInitData.yearlyHexagram,
+        } : undefined,
       };
 
       // 更新会话状态为 inference
@@ -2034,6 +2119,12 @@ function buildTurnResultDTO(
   };
   branchingNarratives?: string[];
   nextRoundHints?: string;
+  roundTitle?: string;
+  cashFlowWarning?: Array<{
+    entityId: string;
+    message: string;
+    severity: 'warning' | 'critical';
+  }>;
 } {
   // 如果已经是符合契约的结构，直接返回
   if (result && result.narrative && Array.isArray(result.perEntityPanel)) {
@@ -2052,6 +2143,8 @@ function buildTurnResultDTO(
       ledger: result.ledger,
       branchingNarratives: result.branchingNarratives,
       nextRoundHints: result.nextRoundHints || '',
+      roundTitle: result.roundTitle,
+      cashFlowWarning: result.cashFlowWarning,
     };
   }
 
@@ -2163,6 +2256,8 @@ function buildTurnResultDTO(
     ledger: result?.ledger,
     branchingNarratives: result?.branchingNarratives,
     nextRoundHints: result?.nextRoundHints || result?.hints || '',
+    roundTitle: result?.roundTitle,
+    cashFlowWarning: result?.cashFlowWarning,
   };
 }
 
@@ -2484,8 +2579,18 @@ router.get(
 
       // 获取推演结果（如果有）
       let inferenceResult = null;
+      
+      // 根据当前阶段决定获取哪个回合的推演结果
       if (session.roundStatus === 'result' || session.roundStatus === 'inference') {
+        // 结果阶段或推演阶段：获取当前回合的推演结果
         const resultKey = `inference:result:${sessionId}:${session.currentRound}`;
+        const resultData = await redis.get(resultKey);
+        if (resultData) {
+          inferenceResult = JSON.parse(resultData);
+        }
+      } else if (session.roundStatus === 'decision' && session.currentRound > 1) {
+        // 决策阶段且不是第一回合：获取上一回合的推演结果作为背景
+        const resultKey = `inference:result:${sessionId}:${session.currentRound - 1}`;
         const resultData = await redis.get(resultKey);
         if (resultData) {
           inferenceResult = JSON.parse(resultData);
@@ -2591,12 +2696,21 @@ router.post(
 
       // 进入下一回合
       const nextRound = session.currentRound + 1;
+      
+      // 获取主持人配置的决策时限
+      const hostConfig = await prisma.hostConfig.findUnique({
+        where: { roomId: session.roomId },
+        select: { decisionTimeLimit: true },
+      });
+      const decisionMinutes = hostConfig?.decisionTimeLimit || 4;
+      const newDeadline = new Date(Date.now() + decisionMinutes * 60 * 1000);
+      
       await prisma.gameSession.update({
         where: { id: sessionId },
         data: {
           currentRound: nextRound,
           roundStatus: 'decision',
-          decisionDeadline: null,
+          decisionDeadline: newDeadline,
           updatedAt: new Date(),
         },
       });
@@ -2607,6 +2721,7 @@ router.post(
         previousRound: roundNumber,
         currentRound: nextRound,
         roundStatus: 'decision',
+        decisionDeadline: newDeadline.toISOString(),
       });
 
       // 广播阶段切换通知
@@ -2615,6 +2730,17 @@ router.post(
         round: nextRound,
         stage: 'decision',
         previousStage: 'result',
+        decisionDeadline: newDeadline.toISOString(),
+      });
+
+      // 广播游戏状态更新（确保前端能收到新的 deadline）
+      io.to(session.roomId).emit('game_state_update', {
+        roomId: session.roomId,
+        sessionId,
+        currentRound: nextRound,
+        roundStatus: 'decision',
+        decisionDeadline: newDeadline.toISOString(),
+        status: session.status,
       });
 
       return res.json({
@@ -2625,6 +2751,7 @@ router.post(
           previousRound: roundNumber,
           currentRound: nextRound,
           roundStatus: 'decision',
+          decisionDeadline: newDeadline.toISOString(),
         },
       });
     } catch (error) {

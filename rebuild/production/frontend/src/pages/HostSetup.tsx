@@ -1010,12 +1010,24 @@ function HostSetup() {
                       {opt.description}
                     </Paragraph>
                     {opt.expectedDelta && (
-                      <Space>
-                        {Object.entries(opt.expectedDelta).map(([k, v]) => (
-                          <Tag key={k} color={v >= 0 ? 'green' : 'red'}>
-                            {k}: {v >= 0 ? '+' : ''}{v}
-                          </Tag>
-                        ))}
+                      <Space wrap>
+                        {Object.entries(opt.expectedDelta).map(([k, v]) => {
+                          // 处理嵌套对象的情况（如按主体分组的预期变化）
+                          if (typeof v === 'object' && v !== null) {
+                            return Object.entries(v).map(([subK, subV]) => (
+                              <Tag key={`${k}-${subK}`} color={typeof subV === 'number' && subV >= 0 ? 'green' : 'red'}>
+                                {k}/{subK}: {typeof subV === 'number' ? (subV >= 0 ? '+' : '') + subV : String(subV)}
+                              </Tag>
+                            ));
+                          }
+                          // 处理普通数值
+                          const numVal = typeof v === 'number' ? v : 0;
+                          return (
+                            <Tag key={k} color={numVal >= 0 ? 'green' : 'red'}>
+                              {k}: {numVal >= 0 ? '+' : ''}{numVal}
+                            </Tag>
+                          );
+                        })}
                       </Space>
                     )}
                   </Card>

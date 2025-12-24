@@ -176,7 +176,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
   const { narrative, events, onEventTriggered } = props;
 
   const [displayedText, setDisplayedText] = useState('');
-  const [triggeredKeywords, setTriggeredKeywords] = useState<Set<string>>(new Set());
+  const triggeredKeywordsRef = useRef<Set<string>>(new Set());
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -185,7 +185,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
       clearInterval(intervalRef.current);
     }
     setDisplayedText('');
-    setTriggeredKeywords(new Set());
+    triggeredKeywordsRef.current = new Set();
 
     let index = 0;
     intervalRef.current = window.setInterval(() => {
@@ -201,13 +201,11 @@ function CinematicPlayer(props: CinematicPlayerProps) {
 
       // 监听关键字是否已经出现在已输出文本中，触发对应事件
       events.forEach(eventItem => {
-        if (triggeredKeywords.has(eventItem.keyword)) {
+        if (triggeredKeywordsRef.current.has(eventItem.keyword)) {
           return;
         }
         if (nextText.includes(eventItem.keyword)) {
-          const nextTriggered = new Set(triggeredKeywords);
-          nextTriggered.add(eventItem.keyword);
-          setTriggeredKeywords(nextTriggered);
+          triggeredKeywordsRef.current.add(eventItem.keyword);
           if (onEventTriggered) {
             onEventTriggered(eventItem);
           }
@@ -222,7 +220,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [narrative, events, onEventTriggered, triggeredKeywords]);
+  }, [narrative, events, onEventTriggered]);
 
   return (
     <p className="typewriter-cursor leading-relaxed text-xl font-serif">
@@ -270,34 +268,74 @@ function InferenceResultPage() {
   const [progress, setProgress] = useState<InferenceProgress | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
 
-  // 资产看板的本地状态（仅用于前端动效演示，不依赖后端返回）
-  const [assets, setAssets] = useState<Record<string, number>>({
-    cash: 800,
-    morale: 60,
-    reputation: 55,
-  });
+  // 资产看板的本地状态（从后端数据初始化，用于动效演示）
+  const [assets, setAssets] = useState<Record<string, number>>({});
   const [mutatingResource, setMutatingResource] = useState<string | null>(null);
   const [flashActive, setFlashActive] = useState(false);
 
-  // 统一的回合结果视图模型：优先使用后端返回，缺失时退化为 mockTurnResult
+  // 统一的回合结果视图模型：优先使用后端返回，AI处理中时显示空数据
   const turnResult: TurnResultDTO = useMemo(() => {
-    if (result?.status === 'completed' && result.result?.uiTurnResult) {
-      const ui = result.result.uiTurnResult;
+    // 如果 AI 正在处理中，返回空数据结构（不显示 mock 数据）
+    if (!result || result.status === 'processing') {
       return {
-        ...mockTurnResult,
-        ...ui,
-        narrative: ui.narrative || mockTurnResult.narrative,
-        events: ui.events && ui.events.length > 0 ? ui.events : mockTurnResult.events,
-        hexagram: ui.hexagram || mockTurnResult.hexagram,
-        options: ui.options && ui.options.length > 0 ? ui.options : mockTurnResult.options,
-        ledger: ui.ledger || mockTurnResult.ledger,
-        branchingNarratives:
-          ui.branchingNarratives && ui.branchingNarratives.length > 0
-            ? ui.branchingNarratives
-            : mockTurnResult.branchingNarratives,
+        narrative: '',
+        events: [],
+        redactedSegments: [],
+        perEntityPanel: [],
+        leaderboard: [],
+        riskCard: '',
+        opportunityCard: '',
+        benefitCard: '',
+        achievements: [],
+        hexagram: undefined,
+        options: [],
+        ledger: undefined,
+        branchingNarratives: [],
+        roundTitle: undefined,
+        cashFlowWarning: undefined,
       };
     }
-    return mockTurnResult;
+    
+    // AI 完成后，使用真实数据
+    if (result.status === 'completed' && result.result?.uiTurnResult) {
+      const ui = result.result.uiTurnResult;
+      return {
+        narrative: ui.narrative || '',
+        events: ui.events || [],
+        redactedSegments: ui.redactedSegments || [],
+        perEntityPanel: ui.perEntityPanel || [],
+        leaderboard: ui.leaderboard || [],
+        riskCard: ui.riskCard || '',
+        opportunityCard: ui.opportunityCard || '',
+        benefitCard: ui.benefitCard || '',
+        achievements: ui.achievements || [],
+        hexagram: ui.hexagram,
+        options: ui.options || [],
+        ledger: ui.ledger,
+        branchingNarratives: ui.branchingNarratives || [],
+        roundTitle: ui.roundTitle,
+        cashFlowWarning: ui.cashFlowWarning,
+      };
+    }
+    
+    // 失败或其他状态，返回空数据
+    return {
+      narrative: '',
+      events: [],
+      redactedSegments: [],
+      perEntityPanel: [],
+      leaderboard: [],
+      riskCard: '',
+      opportunityCard: '',
+      benefitCard: '',
+      achievements: [],
+      hexagram: undefined,
+      options: [],
+      ledger: undefined,
+      branchingNarratives: [],
+      roundTitle: undefined,
+      cashFlowWarning: undefined,
+    };
   }, [result]);
   const renderHexagram = (hexagram?: TurnHexagram) => {
     if (!hexagram) return null;
@@ -384,9 +422,116 @@ function InferenceResultPage() {
               <p className="text-sm text-slate-300 mb-2">{opt.description}</p>
               {opt.expectedDelta && (
                 <div className="flex flex-wrap gap-2 text-xs text-slate-200">
-                  {Object.entries(opt.expectedDelta).map(([key, val]) => (
-                    <Tag key={key} color={val >= 0 ? 'green' : 'red'}>
-                      {key}: {val >= 0 ? `+${(val * 100).toFixed(0)}%` : `${(val * 100).toFixed(0)}%`}
+                  {Object.entries(opt.expectedDelta).map(([key, val]) => {
+                    // 智能格式化：cash 类字段显示为金额，其他字段根据数值大小判断
+                    const isCashField = key.toLowerCase().includes('cash') || key.toLowerCase().includes('金');
+                    const isLargeNumber = Math.abs(val) > 100;
+                    
+                    let displayValue: string;
+                    if (isCashField || isLargeNumber) {
+                      // 大数值显示为金额格式
+                      displayValue = val >= 0 
+                        ? `+${val.toLocaleString()}` 
+                        : val.toLocaleString();
+                    } else if (Math.abs(val) <= 1) {
+                      // 小数值（0-1之间）显示为百分比
+                      displayValue = val >= 0 
+                        ? `+${(val * 100).toFixed(0)}%` 
+                        : `${(val * 100).toFixed(0)}%`;
+                    } else {
+                      // 中等数值直接显示
+                      displayValue = val >= 0 ? `+${val}` : `${val}`;
+                    }
+                    
+                    return (
+                      <Tag key={key} color={val >= 0 ? 'green' : 'red'}>
+                        {key}: {displayValue}
+                      </Tag>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+    );
+  };
+
+  const renderEntityPanel = (panels?: TurnResultDTO['perEntityPanel']) => {
+    if (!panels || panels.length === 0) return null;
+    return (
+      <GlassCard title="主体状态面板" extra={<TrendingUp size={18} />}>
+        <div className="space-y-4">
+          {panels.map(entity => (
+            <div
+              key={entity.id}
+              className={`p-4 rounded-lg border ${
+                entity.broken
+                  ? 'bg-rose-500/10 border-rose-500/30'
+                  : 'bg-slate-900/40 border-slate-800/60'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-slate-100">{entity.name}</span>
+                  <Tag color={entity.broken ? 'error' : 'default'} className="text-[10px]">
+                    {entity.id}
+                  </Tag>
+                </div>
+                {entity.broken && (
+                  <Tag color="error">已破产</Tag>
+                )}
+              </div>
+              
+              {/* 核心资源 */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-2 rounded bg-slate-800/40">
+                  <span className="text-[10px] text-slate-400 uppercase">现金</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-lg font-mono text-emerald-300">
+                      ¥{entity.cash?.toLocaleString() || 0}
+                    </span>
+                    {entity.delta?.cash && (
+                      <span className={`text-xs ${entity.delta.cash >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {entity.delta.cash >= 0 ? '+' : ''}{entity.delta.cash.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-slate-800/40">
+                  <span className="text-[10px] text-slate-400 uppercase">净收支</span>
+                  <div className="text-sm font-mono">
+                    <span className="text-emerald-300">+{entity.passiveIncome || 0}</span>
+                    <span className="text-slate-500 mx-1">/</span>
+                    <span className="text-rose-300">-{entity.passiveExpense || 0}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 动态属性 */}
+              {entity.attributes && Object.keys(entity.attributes).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(entity.attributes).map(([key, value]) => (
+                    <div key={key} className="px-2 py-1 rounded bg-slate-800/40 text-xs">
+                      <span className="text-slate-400">{key}: </span>
+                      <span className="text-slate-200 font-mono">{value}</span>
+                      {entity.delta?.[key] && (
+                        <span className={`ml-1 ${Number(entity.delta[key]) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {Number(entity.delta[key]) >= 0 ? '+' : ''}{entity.delta[key]}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* 成就 */}
+              {entity.achievementsUnlocked && entity.achievementsUnlocked.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {entity.achievementsUnlocked.map((ach, idx) => (
+                    <Tag key={idx} color="gold" className="text-[10px]">
+                      🏆 {ach}
                     </Tag>
                   ))}
                 </div>
@@ -514,7 +659,9 @@ function InferenceResultPage() {
           </Button>
           <div className="flex flex-col">
             <h1 className="text-2xl font-bold tech-gradient-text uppercase tracking-widest">推演视界</h1>
-            <span className="text-xs text-slate-500">SESSION: {sessionId} · ROUND: {round}</span>
+            <span className="text-xs text-slate-500">
+              {turnResult.roundTitle || `SESSION: ${sessionId} · ROUND: ${round}`}
+            </span>
           </div>
         </Space>
         {result?.status === 'processing' && (
@@ -560,6 +707,7 @@ function InferenceResultPage() {
 
             {renderBranching(turnResult.branchingNarratives)}
             {renderOptions(turnResult.options)}
+            {renderEntityPanel(turnResult.perEntityPanel)}
 
             {result?.result?.nextRoundHints && (
               <GlassCard title="先导提示" className="border-indigo-500/30">
@@ -641,24 +789,24 @@ function InferenceResultPage() {
             <GlassCard title="本回合评估" extra={<CheckCircle2 size={18} />}>
               <div className="space-y-2 text-xs text-slate-300">
                 <div className="flex items-start gap-2">
-                  <span className="mt-[2px] text-rose-400 font-mono text-[10px] uppercase tracking-widest">
-                    Risk
+                  <span className="mt-[2px] text-rose-400 font-mono text-[10px] tracking-widest">
+                    风险
                   </span>
                   <p className="leading-snug">
                     {typeof turnResult.riskCard === 'string' ? turnResult.riskCard : turnResult.riskCard?.summary}
                   </p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="mt-[2px] text-emerald-400 font-mono text-[10px] uppercase tracking-widest">
-                    Opportunity
+                  <span className="mt-[2px] text-emerald-400 font-mono text-[10px] tracking-widest">
+                    机会
                   </span>
                   <p className="leading-snug">
                     {typeof turnResult.opportunityCard === 'string' ? turnResult.opportunityCard : turnResult.opportunityCard?.summary}
                   </p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="mt-[2px] text-sky-400 font-mono text-[10px] uppercase tracking-widest">
-                    Benefit
+                  <span className="mt-[2px] text-sky-400 font-mono text-[10px] tracking-widest">
+                    效益
                   </span>
                   <p className="leading-snug">
                     {typeof turnResult.benefitCard === 'string' ? turnResult.benefitCard : turnResult.benefitCard?.summary}
@@ -666,6 +814,32 @@ function InferenceResultPage() {
                 </div>
               </div>
             </GlassCard>
+
+            {/* 现金流警告 */}
+            {turnResult.cashFlowWarning && turnResult.cashFlowWarning.length > 0 && (
+              <GlassCard title="现金流警告" extra={<AlertTriangle size={18} className="text-rose-400" />}>
+                <div className="space-y-2">
+                  {turnResult.cashFlowWarning.map((warning, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-2 rounded border-l-2 pl-3 ${
+                        warning.severity === 'critical'
+                          ? 'bg-rose-500/20 border-rose-500'
+                          : 'bg-amber-500/20 border-amber-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Tag color={warning.severity === 'critical' ? 'error' : 'warning'} className="text-[10px]">
+                          {warning.severity === 'critical' ? '危急' : '警告'}
+                        </Tag>
+                        <span className="text-xs text-slate-300">{warning.entityId}</span>
+                      </div>
+                      <p className="text-xs text-slate-200">{warning.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
 
             {/* 成就解锁列表：使用 List / Empty 展示 TurnResultDTO 的 achievements */}
             <GlassCard title="成就解锁" extra={<Trophy size={18} />}>

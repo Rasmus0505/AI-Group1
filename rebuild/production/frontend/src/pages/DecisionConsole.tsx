@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Card, Progress, Input, Button, Divider, Tag, Typography, Modal, Alert, Table, Spin } from 'antd';
 import { Activity, TrendingUp, ShieldCheck, Zap, Layers, BookOpen, BarChart2 } from 'lucide-react';
 import { TurnResultDTO, TurnLedger, TurnHexagram, TurnOption, TurnEntityPanel } from '../types/turnResult';
+import { gameAPI } from '../services/game';
 import DivinationOverlay from '../components/DivinationOverlay';
 
 const { Title, Text, Paragraph } = Typography;
@@ -20,138 +22,23 @@ const getEntityPalette = (entity: TurnEntityPanel) => {
   return palette[key] || palette.deepBlue;
 };
 
-const mockHexagram: TurnHexagram = {
-  name: '风雷益',
-  omen: 'positive',
-  lines: ['yang', 'yin', 'yang', 'yang', 'yin', 'yin'],
-  text: '利用安身立命，利涉大川。',
-  colorHint: '#34d399',
-};
-
-const mockLedger: TurnLedger = {
-  startingCash: 1200000,
-  passiveIncome: 180000,
-  passiveExpense: 90000,
-  decisionCost: 220000,
-  balance: 1110000,
-};
-
-const mockOptions: TurnOption[] = [
-  {
-    id: 'opt-1',
-    title: '加码研发与渠道合作',
-    description: '聚焦 5G 终端渠道，换取核心渠道覆盖。',
-    expectedDelta: { cash: -8, marketShare: 12, reputation: 6 },
-  },
-  {
-    id: 'opt-2',
-    title: '压缩成本，稳健扩张',
-    description: '降低可变成本，推迟大额扩产。',
-    expectedDelta: { cash: 6, marketShare: -3, reputation: 2 },
-  },
-  {
-    id: 'opt-3',
-    title: '海外市场试探投放',
-    description: '小额试投，验证区域增长弹性。',
-    expectedDelta: { cash: -2, marketShare: 5, reputation: 4 },
-  },
-];
-
-const mockEntities: TurnEntityPanel[] = [
-  {
-    id: 'A',
-    name: '主体 A',
-    cash: 520000,
-    marketShare: 24,
-    reputation: 68,
-    innovation: 72,
-    attributes: { '市场份额': 24, '品牌声誉': 68, '创新能力': 72 },
-    passiveIncome: 80000,
-    passiveExpense: 45000,
-    delta: { cash: 20000, marketShare: 2 },
-    broken: false,
-    achievementsUnlocked: [],
-    creditRating: 'A-',
-    paletteKey: 'deepBlue',
-    accentColor: '#38bdf8',
-  },
-  {
-    id: 'B',
-    name: '主体 B',
-    cash: 410000,
-    marketShare: 21,
-    reputation: 61,
-    innovation: 64,
-    attributes: { '市场份额': 21, '品牌声誉': 61, '创新能力': 64 },
-    passiveIncome: 70000,
-    passiveExpense: 40000,
-    delta: { cash: -15000, marketShare: -1 },
-    broken: false,
-    achievementsUnlocked: [],
-    creditRating: 'BBB+',
-    paletteKey: 'darkGold',
-    accentColor: '#f59e0b',
-  },
-  {
-    id: 'C',
-    name: '主体 C',
-    cash: 330000,
-    marketShare: 18,
-    reputation: 57,
-    innovation: 58,
-    attributes: { '市场份额': 18, '品牌声誉': 57, '创新能力': 58 },
-    passiveIncome: 60000,
-    passiveExpense: 38000,
-    delta: { cash: 10000, marketShare: 1 },
-    broken: false,
-    achievementsUnlocked: [],
-    creditRating: 'BBB',
-    paletteKey: 'inkGreen',
-    accentColor: '#34d399',
-  },
-  {
-    id: 'D',
-    name: '主体 D',
-    cash: 280000,
-    marketShare: 16,
-    reputation: 55,
-    innovation: 52,
-    attributes: { '市场份额': 16, '品牌声誉': 55, '创新能力': 52 },
-    passiveIncome: 55000,
-    passiveExpense: 36000,
-    delta: { cash: -5000, marketShare: 0 },
-    broken: false,
-    achievementsUnlocked: [],
-    creditRating: 'BB+',
-    paletteKey: 'roseCopper',
-    accentColor: '#fb7185',
-  },
-];
-
-const mockTurnResult: TurnResultDTO = {
-  narrative:
-    '本季度，渠道战与成本战交织，主体 A 率先加码 5G 终端合作，带动市场份额回升；主体 B 收缩开支，现金流趋稳；主体 C 小步试探海外市场；主体 D 继续稳健运营，观察行业风向。',
-  events: [
-    { keyword: '渠道合作', type: 'positive', description: '渠道合作带动市场份额提升', resource: 'marketShare', newValue: 24 },
-    { keyword: '成本压缩', type: 'neutral', description: '成本压缩使现金流趋稳', resource: 'cash', newValue: 410000 },
-  ],
-  perEntityPanel: mockEntities,
-  leaderboard: [
-    { id: 'A', name: '主体 A', score: 640, rank: 1, rankChange: 1 },
-    { id: 'B', name: '主体 B', score: 590, rank: 2, rankChange: -1 },
-    { id: 'C', name: '主体 C', score: 540, rank: 3, rankChange: 0 },
-    { id: 'D', name: '主体 D', score: 500, rank: 4, rankChange: 0 },
-  ],
-  riskCard: '渠道依赖度提升，需防范单点失效。',
-  opportunityCard: '海外小额试投反馈良好，可评估扩大规模。',
-  benefitCard: '被动收入稳定，现金流安全边际尚可。',
+// 空的默认 TurnResultDTO，用于数据加载前的初始状态
+const emptyTurnResult: TurnResultDTO = {
+  narrative: '',
+  events: [],
+  perEntityPanel: [],
+  leaderboard: [],
+  riskCard: '',
+  opportunityCard: '',
+  benefitCard: '',
   achievements: [],
-  hexagram: mockHexagram,
-  options: mockOptions,
-  ledger: mockLedger,
-  branchingNarratives: ['主线：渠道扩张', '分支：成本压缩试验', '分支：海外试投'],
+  hexagram: undefined,
+  options: [],
+  ledger: undefined,
+  branchingNarratives: [],
   redactedSegments: [],
-  nextRoundHints: '关注渠道谈判续约与海外投放 ROI。',
+  roundTitle: undefined,
+  cashFlowWarning: undefined,
 };
 
 const formatDelta = (expected?: Record<string, number>) => {
@@ -190,25 +77,105 @@ const HexagramLines: React.FC<{ lines: Array<'yang' | 'yin'>; colorHint?: string
   </div>
 );
 
-const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult = mockTurnResult }) => {
+const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult: propTurnResult }) => {
+  const { sessionId } = useParams<{ sessionId: string }>();
   const [introVisible, setIntroVisible] = useState(true);
   const [ritualVisible, setRitualVisible] = useState(false);
   const [showSpinner, setShowSpinner] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_bankruptVisible, setBankruptVisible] = useState(false);
-  const hexagram = useMemo(() => turnResult.hexagram || mockHexagram, [turnResult]);
-  const ledger = useMemo(() => turnResult.ledger || mockLedger, [turnResult]);
-  const options = useMemo(() => turnResult.options || mockOptions, [turnResult]);
-  const entities = useMemo(() => turnResult.perEntityPanel || mockEntities, [turnResult]);
-  const cashCoverage =
-    ledger.passiveExpense > 0 ? ledger.balance / ledger.passiveExpense : Infinity;
-  const isCashWarning = cashCoverage <= 1.2; // 余额接近被动支出临界
-  const hasBankrupt = entities.some(e => e.cash <= 0 || e.broken);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_ritualActive, setRitualActive] = useState(false);
 
+  // 从 API 获取游戏状态
+  const [gameState, setGameState] = useState<Record<string, unknown> | null>(null);
+  const [turnResult, setTurnResult] = useState<TurnResultDTO>(propTurnResult || emptyTurnResult);
+  const [isLoading, setIsLoading] = useState(!propTurnResult);
+
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const loadGameState = async () => {
+      setIsLoading(true);
+      try {
+        const state = await gameAPI.getGameState(sessionId);
+        setGameState(state.gameState);
+
+        // 从推演结果中获取 turnResult
+        const rawResult = state.inferenceResult?.result as Record<string, unknown> | undefined;
+        const uiTurn = rawResult?.uiTurnResult as TurnResultDTO | undefined;
+        if (uiTurn) {
+          setTurnResult(uiTurn);
+        }
+      } catch (err) {
+        console.error('Failed to load game state:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadGameState();
+  }, [sessionId]);
+
+  // 从 gameState 获取背景故事
+  const backgroundStory = useMemo(() => {
+    const gs = gameState as Record<string, unknown> | null;
+    if (gs?.backgroundStory && typeof gs.backgroundStory === 'string') {
+      return gs.backgroundStory;
+    }
+    return '';
+  }, [gameState]);
+
+  // 从 gameState 获取主体信息
+  const entitiesFromState = useMemo((): TurnEntityPanel[] | null => {
+    const gs = gameState as Record<string, unknown> | null;
+    const entities = gs?.entities as Array<Record<string, unknown>> | undefined;
+    if (entities && entities.length > 0) {
+      const paletteKeys: PaletteKey[] = ['deepBlue', 'darkGold', 'inkGreen', 'roseCopper'];
+      return entities.map((entity, index) => {
+        const attrs = entity.attributes as Record<string, number> | undefined;
+        return {
+          id: String(entity.id || ''),
+          name: String(entity.name || ''),
+          cash: Number(entity.cash) || 0,
+          marketShare: attrs?.['市场份额'] || 0,
+          reputation: attrs?.['品牌声誉'] || 0,
+          innovation: attrs?.['创新能力'] || 0,
+          attributes: attrs || {},
+          passiveIncome: Number(entity.passiveIncome) || 0,
+          passiveExpense: Number(entity.passiveExpense) || 0,
+          delta: {},
+          broken: false,
+          achievementsUnlocked: [],
+          creditRating: String(entity.creditRating || 'N/A'),
+          paletteKey: paletteKeys[index % 4],
+        };
+      });
+    }
+    return null;
+  }, [gameState]);
+
+  // 不再使用 mock 数据作为回退，当数据为空时显示空状态
+  const hexagram = useMemo(() => turnResult?.hexagram || null, [turnResult]);
+  const ledger = useMemo(() => turnResult?.ledger || null, [turnResult]);
+  const options = useMemo(() => turnResult?.options || [], [turnResult]);
+  const entities = useMemo(() => entitiesFromState || turnResult?.perEntityPanel || [], [entitiesFromState, turnResult]);
+  const cashCoverage =
+    ledger && ledger.passiveExpense > 0 ? ledger.balance / ledger.passiveExpense : Infinity;
+  const isCashWarning = ledger ? cashCoverage <= 1.2 : false; // 余额接近被动支出临界
+  const hasBankrupt = entities.some((e: TurnEntityPanel) => e.cash <= 0 || e.broken);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-6 space-y-6 relative">
+      {/* 全局加载状态 */}
+      {isLoading && (
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <Spin size="large" />
+            <Text className="text-slate-300">正在加载游戏数据...</Text>
+          </div>
+        </div>
+      )}
       <Modal
         open={introVisible}
         closable={false}
@@ -225,7 +192,7 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
       >
         <Title level={4} className="!text-slate-800">凡墙皆是门 · 背景故事</Title>
         <Paragraph className="text-slate-700 mb-2">
-          在周期性的市场震荡中，四面墙壁即是四扇门。赛道、政策、资本、技术的缝隙正打开，季度节奏的博弈迫使各主体在现金流、渠道与创新之间寻找平衡。
+          {backgroundStory || '在周期性的市场震荡中，四面墙壁即是四扇门。赛道、政策、资本、技术的缝隙正打开，季度节奏的博弈迫使各主体在现金流、渠道与创新之间寻找平衡。'}
         </Paragraph>
         <Paragraph className="text-slate-700 mb-0">
           规则提醒：本游戏以“季度”为回合；主体数量由房间配置决定；未提交指令的主体只结算被动收支；现金流安全优先于扩张冲动。
@@ -278,7 +245,7 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
       </Modal>
       <DivinationOverlay
         visible={ritualVisible}
-        lines={hexagram.lines || mockHexagram.lines}
+        lines={hexagram?.lines || ['yang', 'yang', 'yang', 'yang', 'yang', 'yang']}
         onComplete={() => {
           setRitualVisible(false);
           setRitualActive(false);
@@ -310,7 +277,7 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
           <Text className="text-slate-400">金融赛博夜光风格 · 数据对齐季度节奏</Text>
         </div>
         <Tag color="cyan" className="px-3 py-1 text-sm border border-cyan-500/40 bg-cyan-500/10">
-          当前回合：20XX Q2
+          {turnResult?.roundTitle || (gameState?.currentRound ? `第 ${gameState.currentRound} 回合` : '加载中...')}
         </Tag>
       </div>
 
@@ -322,25 +289,39 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
                 <Layers className="text-cyan-300" size={18} />
                 <Text className="text-cyan-200">周易卦象</Text>
               </div>
-              <Title level={4} className="!text-slate-50 mt-1">{hexagram.name}</Title>
-              <Tag
-                color={hexagram.omen === 'positive' ? 'green' : hexagram.omen === 'negative' ? 'red' : 'geekblue'}
-                className="mt-1"
-              >
-                {hexagram.omen === 'positive' ? '吉' : hexagram.omen === 'negative' ? '凶' : '中'}
-              </Tag>
+              {hexagram ? (
+                <>
+                  <Title level={4} className="!text-slate-50 mt-1">{hexagram.name}</Title>
+                  <Tag
+                    color={hexagram.omen === 'positive' ? 'green' : hexagram.omen === 'negative' ? 'red' : 'geekblue'}
+                    className="mt-1"
+                  >
+                    {hexagram.omen === 'positive' ? '吉' : hexagram.omen === 'negative' ? '凶' : '中'}
+                  </Tag>
+                </>
+              ) : (
+                <Text className="text-slate-500 mt-1">等待推演...</Text>
+              )}
             </div>
-            <div
-              className="w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-400/50 shadow-lg"
-              style={{
-                boxShadow: `0 0 24px ${hexagram.colorHint || '#22d3ee'}`,
-                animation: 'pulse 2.4s ease-in-out infinite',
-              }}
-            />
+            {hexagram && (
+              <div
+                className="w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-400/50 shadow-lg"
+                style={{
+                  boxShadow: `0 0 24px ${hexagram.colorHint || '#22d3ee'}`,
+                  animation: 'pulse 2.4s ease-in-out infinite',
+                }}
+              />
+            )}
           </div>
           <Divider className="border-slate-700" />
-          <HexagramLines lines={hexagram.lines} colorHint={hexagram.colorHint} />
-          <Paragraph className="mt-3 text-slate-300 leading-relaxed">{hexagram.text}</Paragraph>
+          {hexagram ? (
+            <>
+              <HexagramLines lines={hexagram.lines} colorHint={hexagram.colorHint} />
+              <Paragraph className="mt-3 text-slate-300 leading-relaxed">{hexagram.text}</Paragraph>
+            </>
+          ) : (
+            <div className="text-center py-8 text-slate-500">卦象数据加载中...</div>
+          )}
         </Card>
 
         <Card className="bg-slate-900/70 border border-emerald-500/30 shadow-lg shadow-emerald-900/30">
@@ -348,46 +329,70 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <BarChart2 className="text-emerald-300" size={18} />
             <Text className="text-emerald-200">财务核算中心（元）</Text>
           </div>
-          <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-            <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
-              <Text className="text-slate-400">初始资金</Text>
-              <Title level={5} className="!text-slate-50 mt-1">¥ {ledger.startingCash.toLocaleString()}</Title>
-            </div>
-            <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
-              <Text className="text-slate-400">被动收入</Text>
-              <Title level={5} className="!text-emerald-300 mt-1">+¥ {ledger.passiveIncome.toLocaleString()}</Title>
-            </div>
-            <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
-              <Text className="text-slate-400">被动支出（锁定）</Text>
-              <Title level={5} className="!text-rose-300 mt-1">-¥ {ledger.passiveExpense.toLocaleString()}</Title>
-              <div className="text-[11px] text-slate-500 mt-1">不可编辑·基础成本</div>
-            </div>
-            <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10">
-              <Text className="text-amber-200">决策成本（主动）</Text>
-              <Title level={5} className="!text-amber-100 mt-1">-¥ {ledger.decisionCost.toLocaleString()}</Title>
-              <div className="text-[11px] text-amber-200/80 mt-1">本回合主动决策支出</div>
-            </div>
-          </div>
-          <Divider className="border-slate-700" />
-          <div className="flex items-center justify-between">
-            <Text className="text-slate-300">当前余额</Text>
-            <div className="flex items-center gap-2">
-              {isCashWarning && (
-                <Tag color="red" className="animate-pulse border border-rose-500/50">
-                  破产预警
-                </Tag>
+          {ledger ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+                <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
+                  <Text className="text-slate-400">初始资金</Text>
+                  <Title level={5} className="!text-slate-50 mt-1">¥ {ledger.startingCash.toLocaleString()}</Title>
+                </div>
+                <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
+                  <Text className="text-slate-400">被动收入</Text>
+                  <Title level={5} className="!text-emerald-300 mt-1">+¥ {ledger.passiveIncome.toLocaleString()}</Title>
+                </div>
+                <div className="p-3 rounded border border-slate-700 bg-slate-800/60">
+                  <Text className="text-slate-400">被动支出（锁定）</Text>
+                  <Title level={5} className="!text-rose-300 mt-1">-¥ {ledger.passiveExpense.toLocaleString()}</Title>
+                  <div className="text-[11px] text-slate-500 mt-1">不可编辑·基础成本</div>
+                </div>
+                <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10">
+                  <Text className="text-amber-200">决策成本（主动）</Text>
+                  <Title level={5} className="!text-amber-100 mt-1">-¥ {ledger.decisionCost.toLocaleString()}</Title>
+                  <div className="text-[11px] text-amber-200/80 mt-1">本回合主动决策支出</div>
+                </div>
+              </div>
+              <Divider className="border-slate-700" />
+              <div className="flex items-center justify-between">
+                <Text className="text-slate-300">当前余额</Text>
+                <div className="flex items-center gap-2">
+                  {isCashWarning && (
+                    <Tag color="red" className="animate-pulse border border-rose-500/50">
+                      破产预警
+                    </Tag>
+                  )}
+                  <Title
+                    level={4}
+                    className={`mt-0 ${isCashWarning ? '!text-rose-300 animate-pulse' : '!text-cyan-200'}`}
+                  >
+                    ¥ {ledger.balance.toLocaleString()}
+                  </Title>
+                </div>
+              </div>
+              <div className="text-xs text-slate-400 mt-2">
+                现金覆盖倍数：{Number.isFinite(cashCoverage) ? cashCoverage.toFixed(2) : '∞'}（余额 / 被动支出）
+              </div>
+              {/* AI 输出的现金流警告 */}
+              {turnResult?.cashFlowWarning && turnResult.cashFlowWarning.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {turnResult.cashFlowWarning.map((warning, idx) => (
+                    <Alert
+                      key={idx}
+                      type={warning.severity === 'critical' ? 'error' : 'warning'}
+                      showIcon
+                      message={
+                        <span className="text-sm">
+                          {entities.find(e => e.id === warning.entityId)?.name || warning.entityId}: {warning.message}
+                        </span>
+                      }
+                      className="bg-transparent border-rose-500/30"
+                    />
+                  ))}
+                </div>
               )}
-              <Title
-                level={4}
-                className={`mt-0 ${isCashWarning ? '!text-rose-300 animate-pulse' : '!text-cyan-200'}`}
-              >
-                ¥ {ledger.balance.toLocaleString()}
-              </Title>
-            </div>
-          </div>
-          <div className="text-xs text-slate-400 mt-2">
-            现金覆盖倍数：{Number.isFinite(cashCoverage) ? cashCoverage.toFixed(2) : '∞'}（余额 / 被动支出）
-          </div>
+            </>
+          ) : (
+            <div className="text-center py-12 text-slate-500">财务数据加载中...</div>
+          )}
         </Card>
 
         <Card className="bg-slate-900/70 border border-amber-500/30 shadow-lg shadow-amber-900/30">
@@ -396,34 +401,38 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <Text className="text-amber-200">排行榜 · 利润/市占/信用</Text>
           </div>
           <div className="mt-4 space-y-3">
-            {turnResult.leaderboard.map(entry => {
-              const entity = entities.find(e => e.id === entry.id);
-              const colors = entity ? getEntityPalette(entity) : palette.deepBlue;
-              const rankClass =
-                entry.rankChange && entry.rankChange !== 0
-                  ? `rank-pulse ${entry.rankChange > 0 ? 'rank-up' : 'rank-down'}`
-                  : '';
-              return (
-                <div
-                  key={entry.id}
-                  className={`p-3 rounded border ${colors.border} ${colors.bg} flex items-center justify-between ${rankClass}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-slate-800/70 border border-slate-700 flex items-center justify-center text-sm text-slate-200">
-                      {entry.rank}
+            {turnResult?.leaderboard && turnResult.leaderboard.length > 0 ? (
+              turnResult.leaderboard.map(entry => {
+                const entity = entities.find(e => e.id === entry.id);
+                const colors = entity ? getEntityPalette(entity) : palette.deepBlue;
+                const rankClass =
+                  entry.rankChange && entry.rankChange !== 0
+                    ? `rank-pulse ${entry.rankChange > 0 ? 'rank-up' : 'rank-down'}`
+                    : '';
+                return (
+                  <div
+                    key={entry.id}
+                    className={`p-3 rounded border ${colors.border} ${colors.bg} flex items-center justify-between ${rankClass}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-slate-800/70 border border-slate-700 flex items-center justify-center text-sm text-slate-200">
+                        {entry.rank}
+                      </div>
+                      <div>
+                        <Text className={`${colors.text} font-semibold`}>{entry.name}</Text>
+                        <div className="text-xs text-slate-400">信用 {entity?.creditRating || '—'}</div>
+                      </div>
                     </div>
-                    <div>
-                      <Text className={`${colors.text} font-semibold`}>{entry.name}</Text>
-                      <div className="text-xs text-slate-400">信用 {entity?.creditRating || '—'}</div>
+                    <div className="text-right">
+                      <div className="text-sm text-slate-300">评分 {entry.score}</div>
+                      <div className="text-xs text-slate-400">市占 {entity?.marketShare ?? '—'}%</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-slate-300">评分 {entry.score}</div>
-                    <div className="text-xs text-slate-400">市占 {entity?.marketShare ?? '—'}%</div>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-slate-500">排行榜数据加载中...</div>
+            )}
           </div>
         </Card>
       </div>
@@ -434,8 +443,8 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <BookOpen className="text-cyan-300" size={18} />
             <Text className="text-cyan-200">推演叙事（季度节奏）</Text>
           </div>
-          <Paragraph className="text-slate-200 leading-relaxed">{turnResult.narrative}</Paragraph>
-          {turnResult.branchingNarratives && turnResult.branchingNarratives.length > 0 && (
+          <Paragraph className="text-slate-200 leading-relaxed">{turnResult?.narrative || '叙事内容加载中...'}</Paragraph>
+          {turnResult?.branchingNarratives && turnResult.branchingNarratives.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
               {turnResult.branchingNarratives.map((b, idx) => (
                 <Tag key={idx} color="geekblue">{b}</Tag>
@@ -453,19 +462,19 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10">
               <Text className="text-rose-200">风险</Text>
               <Paragraph className="text-slate-200 mb-0">
-                {typeof turnResult.riskCard === 'string' ? turnResult.riskCard : turnResult.riskCard?.summary}
+                {turnResult ? (typeof turnResult.riskCard === 'string' ? turnResult.riskCard : turnResult.riskCard?.summary) : '加载中...'}
               </Paragraph>
             </div>
             <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10">
               <Text className="text-amber-200">机会</Text>
               <Paragraph className="text-slate-200 mb-0">
-                {typeof turnResult.opportunityCard === 'string' ? turnResult.opportunityCard : turnResult.opportunityCard?.summary}
+                {turnResult ? (typeof turnResult.opportunityCard === 'string' ? turnResult.opportunityCard : turnResult.opportunityCard?.summary) : '加载中...'}
               </Paragraph>
             </div>
             <div className="p-3 rounded border border-emerald-500/40 bg-emerald-500/10">
               <Text className="text-emerald-200">效益</Text>
               <Paragraph className="text-slate-200 mb-0">
-                {typeof turnResult.benefitCard === 'string' ? turnResult.benefitCard : turnResult.benefitCard?.summary}
+                {turnResult ? (typeof turnResult.benefitCard === 'string' ? turnResult.benefitCard : turnResult.benefitCard?.summary) : '加载中...'}
               </Paragraph>
             </div>
           </div>
@@ -479,15 +488,19 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <Text className="text-amber-200">智能决策选项</Text>
           </div>
           <div className="space-y-3">
-            {options.map(opt => (
-              <div key={opt.id} className="p-3 rounded border border-slate-700 bg-slate-800/60">
-                <div className="flex items-center justify-between">
-                  <Text className="text-slate-100 font-semibold">{opt.title}</Text>
-                  <Tag color="cyan">{formatDelta(opt.expectedDelta)}</Tag>
+            {options.length > 0 ? (
+              options.map(opt => (
+                <div key={opt.id} className="p-3 rounded border border-slate-700 bg-slate-800/60">
+                  <div className="flex items-center justify-between">
+                    <Text className="text-slate-100 font-semibold">{opt.title}</Text>
+                    <Tag color="cyan">{formatDelta(opt.expectedDelta)}</Tag>
+                  </div>
+                  <Paragraph className="text-slate-300 mb-1">{opt.description}</Paragraph>
                 </div>
-                <Paragraph className="text-slate-300 mb-1">{opt.description}</Paragraph>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="text-center py-4 text-slate-500">暂无决策选项</div>
+            )}
           </div>
           <Divider className="border-slate-700" />
           <div className="space-y-2">
@@ -505,40 +518,44 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult 
             <Text className="text-cyan-200">多主体对比</Text>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {entities.map(entity => {
-              const colors = getEntityPalette(entity);
-              return (
-                <div key={entity.id} className={`p-3 rounded border ${colors.border} ${colors.bg} space-y-2`}>
-                  <div className="flex items-center justify-between">
-                    <Text className={`${colors.text} font-semibold`}>{entity.name}</Text>
-                    <Tag color="cyan" className="text-xs">信用 {entity.creditRating || '—'}</Tag>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm text-slate-200">
-                    <div>现金 ¥ {entity.cash.toLocaleString()}</div>
-                    <div>市占 {entity.marketShare ?? '—'}%</div>
-                    <div>声誉 {entity.reputation ?? '—'}</div>
-                    <div>创新 {entity.innovation ?? '—'}</div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <DeltaBadge value={entity.delta.cash || 0} label="现金Δ" />
-                    <DeltaBadge value={(entity.delta.marketShare as number) || 0} label="市占Δ" />
-                  </div>
-                  <div className="mt-2">
-                    <Text className="text-slate-400 text-xs">被动</Text>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="text-emerald-300">+¥ {entity.passiveIncome.toLocaleString()}</span>
-                      <span className="text-rose-300">-¥ {entity.passiveExpense.toLocaleString()}</span>
+            {entities.length > 0 ? (
+              entities.map(entity => {
+                const colors = getEntityPalette(entity);
+                return (
+                  <div key={entity.id} className={`p-3 rounded border ${colors.border} ${colors.bg} space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <Text className={`${colors.text} font-semibold`}>{entity.name}</Text>
+                      <Tag color="cyan" className="text-xs">信用 {entity.creditRating || '—'}</Tag>
                     </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-slate-200">
+                      <div>现金 ¥ {entity.cash.toLocaleString()}</div>
+                      <div>市占 {entity.marketShare ?? '—'}%</div>
+                      <div>声誉 {entity.reputation ?? '—'}</div>
+                      <div>创新 {entity.innovation ?? '—'}</div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <DeltaBadge value={entity.delta.cash || 0} label="现金Δ" />
+                      <DeltaBadge value={(entity.delta.marketShare as number) || 0} label="市占Δ" />
+                    </div>
+                    <div className="mt-2">
+                      <Text className="text-slate-400 text-xs">被动</Text>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-emerald-300">+¥ {entity.passiveIncome.toLocaleString()}</span>
+                        <span className="text-rose-300">-¥ {entity.passiveExpense.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <Progress
+                      percent={Math.min(100, Math.max(0, (entity.marketShare || 0) * 2))}
+                      size="small"
+                      strokeColor={entity.accentColor || '#22d3ee'}
+                      trailColor="#1f2937"
+                    />
                   </div>
-                  <Progress
-                    percent={Math.min(100, Math.max(0, (entity.marketShare || 0) * 2))}
-                    size="small"
-                    strokeColor={entity.accentColor || '#22d3ee'}
-                    trailColor="#1f2937"
-                  />
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="col-span-2 text-center py-8 text-slate-500">主体数据加载中...</div>
+            )}
           </div>
         </Card>
       </div>

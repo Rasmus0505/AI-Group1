@@ -884,6 +884,27 @@ router.post(
       await ensureRoomHost(roomId, userId);
       const cfg = await getOrCreateHostConfig(roomId, userId);
 
+      // 检查初始化数据是否已保存到 Redis
+      const initKey = `game:init:${roomId}`;
+      const initDataStr = await redis.get(initKey);
+      
+      if (!initDataStr) {
+        // Redis 中没有数据，说明主持人没有生成或保存初始化数据
+        throw new AppError('请先生成并保存游戏初始化数据', 400);
+      }
+
+      // 验证数据完整性
+      let initData: any = null;
+      try {
+        initData = JSON.parse(initDataStr);
+      } catch (e) {
+        throw new AppError('初始化数据格式错误，请重新生成并保存', 400);
+      }
+
+      if (!initData.backgroundStory || !initData.entities || initData.entities.length === 0) {
+        throw new AppError('初始化数据不完整，请重新生成并保存', 400);
+      }
+
       const updated = await prisma.hostConfig.update({
         where: { id: cfg.id },
         data: {

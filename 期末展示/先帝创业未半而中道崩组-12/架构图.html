@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>凡墙皆是门 - 智能体实战架构图</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            /* 表现层：蓝色 (Web) */
+            --layer-ui-bg: #e3f2fd;
+            --layer-ui-border: #1565c0;
+            /* 应用层：绿色 (Coze/Agent) */
+            --layer-app-bg: #e8f5e9;
+            --layer-app-border: #2e7d32;
+            /* 领域层：橙红色 (核心业务) */
+            --layer-domain-bg: #fff3e0;
+            --layer-domain-border: #ef6c00;
+            /* 基础设施：紫色 (Gemini/DB) */
+            --layer-infra-bg: #f3e5f5;
+            --layer-infra-border: #7b1fa2;
+            
+            --text-main: #37474f;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            padding: 40px;
+            margin: 0;
+        }
+
+        .architecture-container {
+            width: 850px;
+            background: white;
+            padding: 40px 50px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+        }
+
+        /* 标题区 */
+        .header-box {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px dashed #eee;
+            padding-bottom: 20px;
+        }
+        .header-box h1 { margin: 0; color: #263238; font-size: 26px; }
+        .header-box .subtitle { margin: 8px 0 0; color: #78909c; font-size: 14px; }
+        .tech-stack-tag {
+            background: #263238; color: #fff; padding: 4px 10px; 
+            border-radius: 4px; font-size: 12px; margin-top: 10px; display: inline-block;
+        }
+
+        /* 层级盒子通用样式 */
+        .layer-box {
+            border-radius: 10px;
+            padding: 15px 20px;
+            position: relative;
+            border-left: 6px solid;
+            background: #fff;
+            transition: all 0.3s ease;
+        }
+        .layer-box:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+
+        .layer-label {
+            position: absolute;
+            left: -160px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 140px;
+            text-align: right;
+        }
+        .layer-label h3 { margin: 0; font-size: 16px; color: #455a64; }
+        .layer-label span { font-size: 12px; color: #90a4ae; }
+
+        .layer-title {
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+        }
+
+        /* 模块网格 */
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .module {
+            background: rgba(255,255,255,0.8);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 6px;
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-main);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 50px;
+        }
+        .module strong { display: block; margin-bottom: 3px; }
+        .module span { font-size: 11px; color: #78909c; }
+
+        /* 各层特定样式 */
+        .ui-layer { background-color: var(--layer-ui-bg); border-color: var(--layer-ui-border); }
+        .ui-layer .layer-title { color: var(--layer-ui-border); }
+
+        .app-layer { background-color: var(--layer-app-bg); border-color: var(--layer-app-border); }
+        .app-layer .layer-title { color: var(--layer-app-border); }
+
+        .domain-layer { background-color: var(--layer-domain-bg); border-color: var(--layer-domain-border); padding: 25px; }
+        .domain-layer .layer-title { color: var(--layer-domain-border); }
+
+        .infra-layer { background-color: var(--layer-infra-bg); border-color: var(--layer-infra-border); }
+        .infra-layer .layer-title { color: var(--layer-infra-border); }
+
+        /* 领域层内部 */
+        .domain-flex { display: flex; gap: 20px; }
+        .domain-sub {
+            flex: 1; background: rgba(255,255,255,0.6);
+            border-radius: 8px; padding: 10px;
+            border: 1px dashed var(--layer-domain-border);
+        }
+        .core-engine { background: #fff3e0; border-left: 4px solid #ff6d00; }
+
+        /* 箭头 */
+        .arrow { text-align: center; color: #cfd8dc; font-size: 20px; margin: -12px 0; z-index: 10; }
+
+        /* 开发环境侧边栏 */
+        .dev-env {
+            position: absolute;
+            right: -140px;
+            top: 100px;
+            width: 100px;
+            text-align: center;
+            background: #212121;
+            color: #fff;
+            padding: 15px 5px;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        .dev-env i { font-size: 24px; display: block; margin-bottom: 5px; color: #4fc3f7; }
+
+    </style>
+</head>
+<body>
+
+    <div class="architecture-container">
+        
+        <div class="header-box">
+            <h1>《凡墙皆是门》智能体系统架构</h1>
+            <div class="subtitle">AI Agent Architecture based on DDD & Coze</div>
+            <div class="tech-stack-tag">Tech Stack: Coze + Gemini + Knowledge Base</div>
+        </div>
+
+        <!-- 开发环境标注 -->
+        <div class="dev-env">
+            <i>💻</i>
+            <strong>IDE 工具</strong><br>
+            Cursor<br>
+            <span style="color:#aaa; font-size:10px;">(Code & Prompt)</span>
+        </div>
+
+        <!-- 1. 表现层 (UI) -->
+        <div class="layer-box ui-layer">
+            <div class="layer-label">
+                <h3>表现层</h3>
+                <span>Presentation</span>
+            </div>
+            <div class="layer-title">🖥️ 网页端入口 (Web Interface)</div>
+            <div class="module-grid">
+                <div class="module"><strong>剧情交互窗口</strong><span>Chat UI</span></div>
+                <div class="module"><strong>数据仪表盘</strong><span>Dashboard</span></div>
+                <div class="module"><strong>决策指令台</strong><span>Command Input</span></div>
+                <div class="module"><strong>主持人控制台</strong><span>Admin Panel</span></div>
+            </div>
+        </div>
+
+        <div class="arrow">⬇</div>
+
+        <!-- 2. 应用层 (Agent) -->
+        <div class="layer-box app-layer">
+            <div class="layer-label">
+                <h3>智能体编排层</h3>
+                <span>Agent Orchestration</span>
+            </div>
+            <div class="layer-title">⚙️ Coze 工作流 (Workflow & Tools)</div>
+            <div class="module-grid">
+                <div class="module"><strong>游戏循环服务</strong><span>Game Loop Workflow</span></div>
+                <div class="module"><strong>知识库检索工具</strong><span>Knowledge Retrieval</span></div>
+                <div class="module"><strong>长期记忆调度</strong><span>Memory Manager</span></div>
+                <div class="module"><strong>事件触发器</strong><span>Event Trigger</span></div>
+            </div>
+        </div>
+
+        <div class="arrow">⬇</div>
+
+        <!-- 3. 领域层 (Core) -->
+        <div class="layer-box domain-layer">
+            <div class="layer-label">
+                <h3>领域层 (核心)</h3>
+                <span>Domain Model</span>
+            </div>
+            <div class="layer-title">💎 商业博弈核心逻辑</div>
+            
+            <div class="domain-flex">
+                <!-- 核心引擎 -->
+                <div class="domain-sub" style="flex:1.5;">
+                    <div style="text-align:center; font-weight:bold; margin-bottom:10px; color:#ef6c00; font-size:12px;">核心规则引擎</div>
+                    <div class="module-grid" style="grid-template-columns: 1fr;">
+                        <div class="module core-engine">
+                            <strong>⚖️ 数据对齐引擎 (CFO)</strong>
+                            <span>会计准则校验 / 资金一致性</span>
+                        </div>
+                        <div class="module core-engine">
+                            <strong>🕸️ 因果链推演引擎</strong>
+                            <span>跨周期效应 / 蝴蝶效应计算</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 业务实体 -->
+                <div class="domain-sub" style="flex:1.2;">
+                    <div style="text-align:center; font-weight:bold; margin-bottom:10px; color:#ef6c00; font-size:12px;">业务实体对象</div>
+                    <div class="module-grid" style="grid-template-columns: repeat(2, 1fr);">
+                        <div class="module"><strong>玩家企业</strong><span>Assets</span></div>
+                        <div class="module"><strong>竞争对手</strong><span>Rivals</span></div>
+                        <div class="module"><strong>商业合同</strong><span>Contracts</span></div>
+                        <div class="module"><strong>宏观市场</strong><span>Market</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow">⬇</div>
+
+        <!-- 4. 基础设施层 (Infra) -->
+        <div class="layer-box infra-layer">
+            <div class="layer-label">
+                <h3>基础设施层</h3>
+                <span>Infrastructure</span>
+            </div>
+            <div class="layer-title">🧱 智能体底座 (Coze Ecosystem)</div>
+            <div class="module-grid">
+                <div class="module" style="border: 2px solid #ab47bc;">
+                    <strong>🤖 Gemini 1.5</strong>
+                    <span>LLM Model</span>
+                </div>
+                <div class="module" style="border: 2px solid #ab47bc;">
+                    <strong>📚 知识库</strong>
+                    <span>Vector Store (RAG)</span>
+                </div>
+                <div class="module">
+                    <strong>🛢️ Coze DB</strong>
+                    <span>Data Persistence</span>
+                </div>
+                <div class="module">
+                    <strong>🔌 Plugins</strong>
+                    <span>External API</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

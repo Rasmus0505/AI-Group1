@@ -125,7 +125,7 @@ function GameSessionPage() {
           const data = await gameAPI.getSession(sessionId);
           setSession(data);
           
-          if (data.hostId && user?.id && data.hostId === user.id) {
+          if (data.hostId && (user?.userId || user?.id) && data.hostId === (user?.userId || user?.id)) {
             navigate(`/game/${sessionId}/state`, { replace: true });
           }
         } catch (err) {
@@ -145,7 +145,7 @@ function GameSessionPage() {
     }, 3000); // 每3秒同步一次
     
     return () => clearInterval(syncInterval);
-  }, [sessionId, user?.id, navigate, session?.currentRound]);
+  }, [sessionId, user?.userId, user?.id, navigate, session?.currentRound]);
 
   const loadSession = useMemo(
     () => async () => {
@@ -155,14 +155,14 @@ function GameSessionPage() {
         setSession(data);
         
         // 如果是主持人，跳转到游戏状态页面
-        if (data.hostId && user?.id && data.hostId === user.id) {
+        if (data.hostId && (user?.userId || user?.id) && data.hostId === (user?.userId || user?.id)) {
           navigate(`/game/${sessionId}/state`, { replace: true });
         }
       } catch (err) {
         message.error('获取会话信息失败');
       }
     },
-    [sessionId, user?.id, navigate]
+    [sessionId, user?.userId, user?.id, navigate]
   );
 
   const loadDecisions = useMemo(
@@ -227,6 +227,23 @@ function GameSessionPage() {
 
     const loadOptions = async () => {
       try {
+        // 第一回合优先使用 gameState 中的 initialOptions
+        if (session.currentRound === 1 && gameState) {
+          const gs = gameState as any;
+          if (gs.initialOptions && Array.isArray(gs.initialOptions) && gs.initialOptions.length > 0) {
+            // 转换 initialOptions 格式以匹配 recommendedOptions 的结构
+            const formattedOptions = gs.initialOptions.map((opt: any) => ({
+              option_id: opt.id || opt.option_id || String(Math.random()),
+              text: opt.text || opt.description || '',
+              expected_effect: opt.expected_effect || opt.effect || '',
+              category: opt.category || 'general',
+            }));
+            setRecommendedOptions(formattedOptions);
+            return;
+          }
+        }
+        
+        // 其他回合或没有 initialOptions 时，调用 API 动态生成
         const data = await gameAPI.getDecisionOptions(sessionId, session.currentRound);
         setRecommendedOptions(data.options || []);
       } catch (err) {
@@ -236,7 +253,7 @@ function GameSessionPage() {
     };
 
     loadOptions();
-  }, [sessionId, session?.currentRound, session?.roundStatus]);
+  }, [sessionId, session?.currentRound, session?.roundStatus, gameState]);
 
   // 处理成就解锁（需要在 WebSocket useEffect 之前定义）
   const handleAchievementUnlock = useCallback((achievements: TurnAchievement[]) => {
@@ -360,7 +377,7 @@ function GameSessionPage() {
     if (!sessionId || !session) return;
     
     // 检查是否超时（仅限制玩家提交，主持人不受此限制）
-    const isHost = session.hostId && user?.id && session.hostId === user.id;
+    const isHost = session.hostId && (user?.userId || user?.id) && session.hostId === (user?.userId || user?.id);
     if (isTimeout && !isHost) {
       message.error('当前回合决策已超时，无法提交');
       return;
@@ -442,6 +459,8 @@ function GameSessionPage() {
       const gs = gameState as any;
       if (gs.narrative) return gs.narrative;
       if (gs.uiTurnResult?.narrative) return gs.uiTurnResult.narrative;
+      // 第一回合使用背景故事作为叙事内容
+      if (gs.backgroundStory) return gs.backgroundStory;
     }
     // 默认提示
     return '欢迎来到游戏，正在等待第一回合开始...';
@@ -1116,7 +1135,7 @@ function GameSessionPage() {
           onClose={() => setSaveDrawerOpen(false)}
           sessionId={sessionId || ''}
           currentRound={session?.currentRound || 1}
-          isHost={session?.hostId === user?.id}
+          isHost={session?.hostId === (user?.userId || user?.id)}
         />
         <TaskDrawer
           open={taskDrawerOpen}

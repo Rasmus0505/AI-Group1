@@ -58,6 +58,26 @@ export interface InferenceRequest {
   }>;
   gameRules: string;
   currentRound: number;
+  // 游戏初始化数据（主持人配置生成的）
+  gameInitData?: {
+    backgroundStory?: string;
+    entities?: Array<{
+      id: string;
+      name: string;
+      cash: number;
+      attributes?: Record<string, number>;
+      passiveIncome?: number;
+      passiveExpense?: number;
+      backstory?: string;
+    }>;
+    yearlyHexagram?: {
+      name: string;
+      omen: string;
+      lines: Array<string>;
+      text: string;
+      yearlyTheme?: string;
+    };
+  };
 }
 
 export interface InferenceResult {
@@ -100,7 +120,7 @@ export class AIService {
    * 构建AI Prompt
    */
   buildPrompt(request: InferenceRequest, gameRules: string): string {
-    const { decisions, activeEvents, currentRound } = request;
+    const { decisions, activeEvents, currentRound, gameInitData } = request;
 
     let prompt = `# 游戏推演请求 - 第 ${currentRound} 回合\n\n`;
 
@@ -119,6 +139,59 @@ export class AIService {
       prompt += '7. 卦象与随机性：每年根据周易卦象生成一条「年度叙事暗线」，用于影响事件风格与触发概率；随机事件既参考卦象，又参考各主体当前属性。\n';
       prompt += '8. 成就与评分：为关键性决策结果赋予阶段性成就标签；游戏在适当时刻给出评分面板，总结各主体表现。\n';
       prompt += '9. 现金流安全：若余额接近被动支出临界，需明确标注风险；未收到指令的主体只结算被动收支，不触发新的主动行动。\n\n';
+    }
+
+    // 游戏初始化数据（主持人配置生成的背景、主体、卦象）
+    if (gameInitData) {
+      // 背景故事
+      if (gameInitData.backgroundStory) {
+        prompt += `## 商业背景故事\n${gameInitData.backgroundStory}\n\n`;
+      }
+
+      // 主体信息（关键！告诉 AI 主体的名称和初始状态）
+      if (gameInitData.entities && gameInitData.entities.length > 0) {
+        prompt += `## 主体信息\n`;
+        prompt += `本游戏共有 ${gameInitData.entities.length} 个决策主体，请严格使用以下主体名称和ID：\n\n`;
+        gameInitData.entities.forEach((entity) => {
+          prompt += `### 主体 ${entity.id}：${entity.name}\n`;
+          prompt += `- 初始资金: ¥${entity.cash?.toLocaleString() || 0}\n`;
+          if (entity.passiveIncome) {
+            prompt += `- 被动收入: +¥${entity.passiveIncome.toLocaleString()}/回合\n`;
+          }
+          if (entity.passiveExpense) {
+            prompt += `- 被动支出: -¥${entity.passiveExpense.toLocaleString()}/回合\n`;
+          }
+          if (entity.attributes) {
+            const attrs = Object.entries(entity.attributes)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(', ');
+            prompt += `- 属性: ${attrs}\n`;
+          }
+          if (entity.backstory) {
+            prompt += `- 背景: ${entity.backstory}\n`;
+          }
+          prompt += `\n`;
+        });
+        prompt += `**重要**: 在推演结果中，perEntityPanel 必须使用上述主体的 id 和 name，不要自行编造主体名称！\n\n`;
+      }
+
+      // 年度卦象
+      if (gameInitData.yearlyHexagram) {
+        const hex = gameInitData.yearlyHexagram;
+        prompt += `## 年度卦象\n`;
+        prompt += `- 卦名: ${hex.name}\n`;
+        prompt += `- 吉凶: ${hex.omen === 'positive' ? '吉' : hex.omen === 'negative' ? '凶' : '中'}\n`;
+        if (hex.lines) {
+          prompt += `- 爻象: ${hex.lines.join(' ')}\n`;
+        }
+        if (hex.text) {
+          prompt += `- 象曰: ${hex.text}\n`;
+        }
+        if (hex.yearlyTheme) {
+          prompt += `- 年度主题: ${hex.yearlyTheme}\n`;
+        }
+        prompt += `\n请在推演叙事中适当融入卦象的意境和暗示。\n\n`;
+      }
     }
 
     // 活跃事件（包含详细进度信息）
@@ -146,25 +219,37 @@ export class AIService {
 
     // 玩家决策
     prompt += `## 玩家决策\n`;
+    prompt += `**重要**: 以下是本回合各主体玩家提交的实际决策，AI 必须基于这些决策内容进行推演，不要忽略或替换玩家的决策！\n\n`;
     if (decisions && decisions.length > 0) {
       decisions.forEach((decision) => {
-        prompt += `玩家 ${decision.playerIndex} (${decision.nickname || decision.username}):\n`;
+        // 尝试匹配主体名称
+        let entityName = decision.nickname || decision.username;
+        if (gameInitData?.entities) {
+          const matchedEntity = gameInitData.entities.find(
+            (e, idx) => idx === decision.playerIndex || e.id === String(decision.playerIndex)
+          );
+          if (matchedEntity) {
+            entityName = `${matchedEntity.name} (${matchedEntity.id})`;
+          }
+        }
+        prompt += `### 主体 ${decision.playerIndex} - ${entityName} 的决策:\n`;
         if (decision.actionText) {
-          prompt += `  行动: ${decision.actionText}\n`;
+          prompt += `  **玩家输入的行动**: ${decision.actionText}\n`;
         }
         if (decision.selectedOptionIds) {
-          prompt += `  选择: ${JSON.stringify(decision.selectedOptionIds)}\n`;
+          prompt += `  **选择的选项ID**: ${JSON.stringify(decision.selectedOptionIds)}\n`;
         }
         if (decision.actionData) {
-          prompt += `  行动数据: ${JSON.stringify(decision.actionData)}\n`;
+          prompt += `  **行动数据**: ${JSON.stringify(decision.actionData)}\n`;
         }
         if (decision.hostModified && decision.hostModification) {
-          prompt += `  [主持人修改] ${JSON.stringify(decision.hostModification)}\n`;
+          prompt += `  **[主持人修改]**: ${JSON.stringify(decision.hostModification)}\n`;
         }
         prompt += `\n`;
       });
+      prompt += `**请务必在 narrative 叙事中体现上述玩家决策的执行过程和结果！**\n\n`;
     } else {
-      prompt += `（当前回合暂无玩家决策）\n\n`;
+      prompt += `（当前回合暂无玩家决策，所有主体只结算被动收支）\n\n`;
     }
 
     // 推演要求：引导输出蓝本要求的结构
@@ -225,6 +310,8 @@ export class AIService {
     prompt += '      "riskLevel": "low|medium|high"\n';
     prompt += '    }\n';
     prompt += '  ],\n';
+    prompt += '  // 注意：expectedDelta 中 cash 是实际金额（如 -50000 表示减少5万元），\n';
+    prompt += '  // 其他属性是百分点变化（如 市场份额: 5 表示增加5个百分点，不是5%）\n';
     prompt += '  "riskCard": "企业风险简评",\n';
     prompt += '  "opportunityCard": "企业机会简评",\n';
     prompt += '  "benefitCard": "当前效益简评",\n';
@@ -240,12 +327,13 @@ export class AIService {
     prompt += '```\n\n';
     prompt += '### 关键要求:\n';
     prompt += '1. **必须输出有效 JSON**，用 ```json 代码块包裹\n';
-    prompt += '2. narrative 中应包含 events 的 keyword，便于前端高亮\n';
-    prompt += '3. perEntityPanel 数量必须与房间配置的主体数量一致\n';
-    prompt += '4. 未收到指令的主体只结算被动收支，不触发主动事件\n';
-    prompt += '5. 若余额接近被动支出临界，必须在 cashFlowWarning 中警示\n';
-    prompt += '6. options 提供 3 个策略选项，附带 expectedDelta 预期变动\n';
-    prompt += '7. 主体 id 使用 A/B/C/D，不要使用 emoji\n';
+    prompt += '2. **必须基于玩家提交的实际决策进行推演**，narrative 叙事中要体现玩家决策的执行和结果\n';
+    prompt += '3. narrative 中应包含 events 的 keyword，便于前端高亮\n';
+    prompt += '4. perEntityPanel 数量必须与房间配置的主体数量一致\n';
+    prompt += '5. 未收到指令的主体只结算被动收支，不触发主动事件\n';
+    prompt += '6. 若余额接近被动支出临界，必须在 cashFlowWarning 中警示\n';
+    prompt += '7. options 提供 3 个**下回合**的策略选项（不是本回合的），附带 expectedDelta 预期变动\n';
+    prompt += '8. 主体 id 使用 A/B/C/D，不要使用 emoji\n';
 
     logger.info(`Prompt built successfully`, {
       promptLength: prompt.length,

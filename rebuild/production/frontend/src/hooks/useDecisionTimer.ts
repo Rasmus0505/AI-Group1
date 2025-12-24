@@ -66,7 +66,7 @@ export function useDecisionTimer(options: UseDecisionTimerOptions): DecisionTime
 
   // 计算剩余时间
   const calculateRemaining = useCallback((): number => {
-    if (!deadline) return 0;
+    if (!deadline) return -1; // 返回 -1 表示没有 deadline
     const end = new Date(deadline).getTime();
     const now = Date.now();
     const diff = Math.floor((end - now) / 1000);
@@ -90,6 +90,22 @@ export function useDecisionTimer(options: UseDecisionTimerOptions): DecisionTime
 
     // 计算初始剩余时间
     const initial = calculateRemaining();
+    
+    // 如果 deadline 已经过期很久（超过 5 秒），可能是旧数据，不触发超时
+    // 等待服务器推送新的 deadline
+    if (initial <= 0) {
+      setState({
+        remainingSeconds: 0,
+        formattedTime: '等待中...',
+        isTimeout: false, // 不立即标记为超时，等待服务器更新
+        isUrgent: false,
+        progressPercent: 0,
+      });
+      urgentTriggeredRef.current = false;
+      timeoutTriggeredRef.current = false;
+      return;
+    }
+    
     initialSecondsRef.current = initial;
     urgentTriggeredRef.current = false;
     timeoutTriggeredRef.current = false;

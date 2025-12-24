@@ -88,8 +88,9 @@ function GameStatePage() {
       setGameState(data);
       
       // 检查是否是主持人（直接使用返回的hostId）
-      if (data.hostId && user?.id) {
-        setIsHost(data.hostId === user.id);
+      const currentUserId = user?.userId || user?.id;
+      if (data.hostId && currentUserId) {
+        setIsHost(data.hostId === currentUserId);
       } else {
         setIsHost(false);
       }
