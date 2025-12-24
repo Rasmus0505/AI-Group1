@@ -267,7 +267,7 @@ export const HelpButton: React.FC<HelpButtonProps> = ({
         ]}
         width={800}
         style={{ top: 20 }}
-        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
+        styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}
       >
         <Tabs
           activeKey={activeTab}

@@ -281,18 +281,24 @@ Write-Host "[7/8] Frontend env / dependencies..." -ForegroundColor Yellow
 function Get-LocalLanIP {
     $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
         $_.IPAddress -notlike "127.*" -and           # 排除本地回环
-        $_.IPAddress -notlike "172.17.*" -and        # 排除 Docker 默认网桥
-        $_.IPAddress -notlike "172.18.*" -and        # 排除 Docker 网络
-        $_.IPAddress -notlike "172.24.*" -and        # 排除 WSL/Hyper-V
+        $_.IPAddress -notlike "172.*" -and           # 排除所有172网段（Docker/WSL/Hyper-V）
         $_.IPAddress -notlike "198.18.*" -and        # 排除代理软件虚拟网卡
         $_.IPAddress -notlike "169.254.*" -and       # 排除 APIPA
         $_.PrefixOrigin -ne "WellKnown"              # 排除系统保留地址
     }
     
-    # 优先选择常见局域网网段
+    # 优先选择 10.x 网段（教室/公司局域网常用）
     foreach ($adapter in $networkAdapters) {
         $ip = $adapter.IPAddress
-        if ($ip -like "192.168.*" -or $ip -like "10.*") {
+        if ($ip -like "10.*") {
+            return $ip
+        }
+    }
+    
+    # 其次选择 192.168.x 网段（家庭路由器常用）
+    foreach ($adapter in $networkAdapters) {
+        $ip = $adapter.IPAddress
+        if ($ip -like "192.168.*") {
             return $ip
         }
     }
