@@ -1,5 +1,29 @@
 # 《凡墙皆是门》三层规则架构开发修缮计划
 
+**最后更新：** 2025-12-25  
+**当前状态：** Phase 1-3 已完成，Phase 4 待实现  
+**下一步：** 规则冲突检测和存档系统集成
+
+## 实现状态总览
+
+### ✅ 已完成功能
+- 三层规则类型定义和架构设计
+- ModifierRegistry 和 RuleManager 核心引擎
+- PromptBuilder 三层规则组装器
+- 基础规则可视化组件
+- 手册文档优化完成
+
+### 🟡 部分完成功能
+- RuleStatusBar 组件 (基础实现，需增强交互)
+- DecisionValidator 组件 (基础实现，需实时验证)
+- 存档系统接口 (已定义，需与后端集成)
+
+### ❌ 待实现功能
+- 规则冲突检测算法
+- 规则编辑器界面
+- AI规则理解度测试
+- 完整的存档兼容性
+
 ## 一、手册优化建议 ✅ 已完成
 
 ### host_manual.md 已优化内容
@@ -151,10 +175,151 @@ const prompt = promptBuilder.buildInferencePrompt({
 const result = await aiService.callAI(config, prompt);
 ```
 
-## 六、后续优化建议
+## 六、紧急实现计划 🚀 新增
 
-1. **规则冲突检测** - 当多个 Modifier 影响同一属性时，需要明确优先级和叠加规则
-2. **规则版本控制** - 支持规则配置的版本管理，便于回滚
-3. **规则编辑器** - 为主持人提供可视化的规则编辑界面
-4. **规则模板市场** - 允许用户分享和下载场景配置
-5. **AI 规则理解度测试** - 定期测试 AI 对规则的理解和遵守程度
+### Phase 4.1: 规则冲突检测 (优先级: P0)
+**预计工时：** 6小时  
+**负责文件：** `frontend/src/engine/ConflictResolver.ts`
+
+```typescript
+interface RuleConflict {
+  conflictType: 'override' | 'stack' | 'multiply';
+  affectedAttribute: string;
+  conflictingModifiers: Modifier[];
+  resolution: 'priority' | 'sum' | 'max' | 'min';
+}
+
+class ConflictResolver {
+  detectConflicts(modifiers: Modifier[]): RuleConflict[];
+  resolveConflicts(conflicts: RuleConflict[]): ResolvedModifier[];
+  calculateFinalValue(baseValue: number, modifiers: ResolvedModifier[]): number;
+}
+```
+
+### Phase 4.2: 实时规则验证 (优先级: P1)
+**预计工时：** 4小时  
+**负责文件：** `frontend/src/components/DecisionValidator.tsx`
+
+需要实现：
+- 决策成本实时计算
+- 规则约束检查 (如：卦象限制、事件影响)
+- 风险评估和警告提示
+- 可行性验证 (现金流、资源限制)
+
+### Phase 4.3: 规则状态持久化 (优先级: P1)
+**预计工时：** 8小时  
+**涉及文件：** 
+- `backend/src/services/RuleStateService.ts`
+- `frontend/src/engine/RuleManager.ts`
+
+```typescript
+interface RuleStateSnapshot {
+  timestamp: string;
+  gameRound: number;
+  coreRules: CoreRules;
+  activeModifiers: Modifier[];
+  currentHexagram: Hexagram;
+  playerStates: PlayerState[];
+  eventHistory: GameEvent[];
+}
+
+// 存档时保存规则状态
+const saveRuleState = async (sessionId: string): Promise<string> => {
+  const snapshot = ruleManager.exportState();
+  return await saveGameService.saveRuleSnapshot(sessionId, snapshot);
+};
+
+// 读档时恢复规则状态
+const loadRuleState = async (sessionId: string, snapshotId: string): Promise<void> => {
+  const snapshot = await saveGameService.loadRuleSnapshot(sessionId, snapshotId);
+  ruleManager.importState(snapshot);
+};
+```
+
+### Phase 4.4: 规则编辑器 (优先级: P2)
+**预计工时：** 12小时  
+**负责文件：** `frontend/src/components/RuleEditor.tsx`
+
+主持人可编辑的规则范围：
+- 临时事件的创建和修改
+- 卦象效果的调整
+- 成就奖励的自定义
+- 场景规则的微调 (初始资金、被动收支等)
+
+**不可编辑的核心规则：**
+- 现金流断裂判定
+- 回合制流程
+- 主体不可代操原则
+
+## 七、质量保证计划
+
+### 7.1 规则一致性测试
+```typescript
+// 测试规则引擎的一致性
+describe('Rule Engine Consistency', () => {
+  test('应该正确处理规则冲突', () => {
+    const modifiers = [
+      { type: 'hexagram', effect: { cash: '+20%' } },
+      { type: 'event', effect: { cash: '-10%' } }
+    ];
+    const result = conflictResolver.resolveConflicts(modifiers);
+    expect(result.finalEffect.cash).toBe('+8%'); // (1.2 * 0.9 - 1) * 100%
+  });
+  
+  test('应该正确验证决策可行性', () => {
+    const decision = { cost: 50000, type: 'investment' };
+    const playerState = { cash: 45000, creditLimit: 10000 };
+    const validation = decisionValidator.validate(decision, playerState);
+    expect(validation.valid).toBe(true); // 45000 + 10000 > 50000
+  });
+});
+```
+
+### 7.2 AI规则理解度监控
+```typescript
+interface RuleComplianceReport {
+  sessionId: string;
+  round: number;
+  expectedRules: string[];
+  aiResponse: string;
+  complianceScore: number; // 0-1
+  violations: RuleViolation[];
+}
+
+// 监控AI是否正确理解和应用规则
+const monitorAICompliance = (prompt: string, response: string): RuleComplianceReport => {
+  // 分析AI响应是否违反了规则
+  // 计算规则遵守度评分
+  // 生成改进建议
+};
+```
+
+## 八、性能优化建议
+
+### 8.1 规则计算优化
+- 使用缓存避免重复计算
+- 批量处理规则更新
+- 异步加载规则配置
+
+### 8.2 内存管理
+- 及时清理过期的Modifier
+- 限制规则历史记录数量
+- 优化规则状态序列化
+
+## 九、后续扩展规划
+
+### 9.1 规则市场 (Phase 5)
+- 用户自定义规则模板
+- 规则模板分享和下载
+- 社区评分和推荐系统
+
+### 9.2 高级规则引擎 (Phase 6)
+- 条件触发规则
+- 动态规则生成
+- 机器学习规则优化
+
+---
+
+**总预计工时：** 30小时  
+**建议完成时间：** 1周  
+**关键里程碑：** 规则冲突检测 → 实时验证 → 存档集成 → 编辑器界面

@@ -53,21 +53,50 @@ export function RoomCard({
       </div>
 
       <div className="room-actions">
-        <Button
-          className="btn-dark"
-          size="small"
-          disabled={isFull || (isPlaying && !isJoined)}
-          loading={loading}
-          onClick={() => {
-            if (isJoined && isPlaying && onResume) {
-              onResume(room.id);
-            } else {
+        {/* 如果用户在房间中且游戏进行中，优先显示继续游戏按钮 */}
+        {isJoined && isPlaying ? (
+          <Button
+            type="primary"
+            size="small"
+            loading={loading}
+            onClick={() => {
+              console.log('继续游戏点击:', {
+                roomId: room.id,
+                isJoined,
+                isPlaying,
+                status: room.status,
+                hasOnResume: !!onResume
+              });
+              if (onResume) {
+                onResume(room.id);
+              }
+            }}
+            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+          >
+            继续游戏
+          </Button>
+        ) : (
+          <Button
+            className="btn-dark"
+            size="small"
+            disabled={isFull || (isPlaying && !isJoined)}
+            loading={loading}
+            onClick={() => {
+              console.log('房间卡片点击:', {
+                roomId: room.id,
+                isJoined,
+                isPlaying,
+                status: room.status,
+                isFull,
+                disabled: isFull || (isPlaying && !isJoined)
+              });
               onJoin(room.id);
-            }
-          }}
-        >
-          {isJoined && isPlaying ? '继续游戏' : isPlaying ? '进行中' : isFull ? '已满' : '加入'}
-        </Button>
+            }}
+          >
+            {isPlaying ? '进行中' : isFull ? '已满' : '加入'}
+          </Button>
+        )}
+        
         {isJoined && (
           <Button className="btn-light" size="small" danger={false} loading={loading} onClick={() => onLeave(room.id)}>
             离开

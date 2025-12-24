@@ -6,6 +6,7 @@ import { wsService } from '../services/websocket';
 import { useAuthStore } from '../stores/authStore';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
+import { HelpButton } from '../components/HelpButton';
 
 const statusColor: Record<string, string> = {
   waiting: 'blue',
@@ -175,7 +176,10 @@ function WaitingRoom() {
   return (
     <Spin spinning={loading && !currentRoom}>
       <Space direction="vertical" size="large" style={{ width: '100%', padding: '24px 24px' }}>
-        <Button onClick={() => navigate('/rooms')} style={{ marginLeft: 0 }}>返回房间列表</Button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button onClick={() => navigate('/rooms')} style={{ marginLeft: 0 }}>返回房间列表</Button>
+          <HelpButton />
+        </div>
         <Card
           title={`房间等待中：${currentRoom?.name || roomId}`}
           extra={

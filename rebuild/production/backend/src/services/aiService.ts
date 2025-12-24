@@ -83,8 +83,9 @@ export interface InferenceResult {
 
 export class AIService {
   private static instance: AIService;
-  private defaultRetries = 5;  // 增加重试次数
-  private defaultTimeout = 120000; // 120秒超时（增加到2分钟）
+  private defaultRetries = 5;  // 增加重试次数（采用main分支的改进）
+  private defaultTimeout = 120000; // 120秒超时（采用main分支的改进）
+  private initTimeout = 300000; // 初始化任务5分钟超时，与前端保持一致（保留你的改进）
 
   private constructor() { }
 
@@ -355,7 +356,8 @@ export class AIService {
   async callAI(
     config: AIConfig,
     prompt: string,
-    retries = this.defaultRetries
+    retries = this.defaultRetries,
+    timeout?: number
   ): Promise<InferenceResult['result']> {
     if (!config.endpoint) {
       throw new Error('AI API endpoint not configured');
@@ -386,8 +388,8 @@ export class AIService {
         ...((config.headers as Record<string, string>) || {}),
       },
       data: requestBody,
-      timeout: this.defaultTimeout,
-      // 使用自定义 Agent 增加连接稳定性
+      timeout: timeout || this.defaultTimeout,  // 保留灵活的超时参数
+      // 使用自定义 Agent 增加连接稳定性（采用main分支的改进）
       httpAgent: httpAgent,
       httpsAgent: httpsAgent,
       // 设置最大重定向次数
@@ -990,7 +992,7 @@ export class AIService {
         initialCash: initConfig.initialCash,
       });
 
-      const result = await this.callAI(config, prompt);
+      const result = await this.callAI(config, prompt, this.defaultRetries, this.initTimeout);
 
       // 解析结果
       if (result.narrative) {

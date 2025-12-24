@@ -1,7 +1,9 @@
 import React from 'react';
-import { Users, Zap, TrendingUp, EyeOff } from 'lucide-react';
+import { Users, Zap, TrendingUp, EyeOff, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Tooltip } from 'antd';
+import { Tooltip, Tag } from 'antd';
+import { intelCalculator } from '../utils/intelCalculator';
+import { IntelligenceData } from '../types/intelligence';
 
 type ResourceKey = 'wealth' | 'power' | 'influence';
 
@@ -29,15 +31,15 @@ export interface OpponentIntelProps {
 }
 
 const SOURCE_LABEL: Record<IntelResource['source'], string> = {
-  public_signal: 'Public bulletin',
-  private_leak: 'Private leak',
-  historical_model: 'Historical model',
+  public_signal: '公开信号',
+  private_leak: '内部消息',
+  historical_model: '历史模型',
 };
 
 const STATUS_LABEL: Record<OpponentIntelRecord['status'], string> = {
-  online: 'Online',
-  offline: 'Offline',
-  thinking: 'Thinking',
+  online: '在线',
+  offline: '离线',
+  thinking: '思考中',
 };
 
 const RESOURCE_META: Record<
@@ -45,17 +47,17 @@ const RESOURCE_META: Record<
   { label: string; icon: React.ReactNode; accent: string }
 > = {
   wealth: {
-    label: 'Wealth',
+    label: '财富',
     icon: <TrendingUp size={12} className="text-amber-300" />,
     accent: 'from-amber-500/80 to-amber-400/40',
   },
   power: {
-    label: 'Power',
+    label: '实力',
     icon: <Zap size={12} className="text-rose-300" />,
     accent: 'from-rose-500/80 to-rose-400/40',
   },
   influence: {
-    label: 'Influence',
+    label: '影响力',
     icon: <Users size={12} className="text-sky-300" />,
     accent: 'from-sky-500/80 to-sky-400/40',
   },
@@ -68,14 +70,6 @@ const formatRangeText = (min: number, max: number) => {
     return v.toFixed(0);
   };
   return `${format(min)} - ${format(max)}`;
-};
-
-const formatFuzzyValue = (value: number) => {
-  // Render last digit as unknown to express uncertainty
-  const base = Math.floor(value);
-  const s = base.toString();
-  if (s.length === 1) return '?';
-  return `${s.slice(0, -1)}?`;
 };
 
 const OpponentIntel: React.FC<OpponentIntelProps> = ({
@@ -116,51 +110,86 @@ const OpponentIntel: React.FC<OpponentIntelProps> = ({
   };
 
   const renderValueCell = (key: ResourceKey, intel: IntelResource) => {
-    const highConfidence = intel.confidence >= 0.7;
-    const mediumConfidence = intel.confidence >= 0.5 && intel.confidence < 0.7;
+    // 转换为新的情报数据格式
+    const intelData: IntelligenceData = {
+      playerId: 'opponent',
+      attribute: key,
+      value: intel.value,
+      confidence: intel.confidence,
+      source: intel.source,
+      lastUpdated: new Date(Date.now() - intel.lastUpdatedMinutesAgo * 60 * 1000),
+      reliability: intel.confidence
+    };
 
-    const baseText =
-      highConfidence || mediumConfidence
-        ? formatFuzzyValue(intel.value)
-        : formatRangeText(intel.min, intel.max);
-
-    const description =
-      highConfidence || mediumConfidence
-        ? 'Approximate point estimate'
-        : 'Wide range estimate';
+    // 使用新的情报计算器
+    const displayValue = intelCalculator.calculateDisplayValue(intelData);
+    const displayMode = intelCalculator.getDisplayMode(intel.confidence);
+    const confidenceColor = intelCalculator.getConfidenceColor(intel.confidence);
+    const sourceIcon = intelCalculator.getSourceIcon(intel.source);
+    const freshness = intelCalculator.calculateFreshness(intelData.lastUpdated);
 
     const content = (
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center justify-between text-[11px] text-slate-300">
-          <span className="font-mono">
-            {baseText}
-            {highConfidence ? '' : ''}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="font-mono text-slate-200" style={{ color: confidenceColor }}>
+            {displayValue}
           </span>
-          <span className="text-[10px] text-slate-500">
-            {SOURCE_LABEL[intel.source]}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px]">{sourceIcon}</span>
+            <Tag 
+              color={freshness.color}
+              style={{ fontSize: '9px', margin: 0, padding: '0 4px' }}
+            >
+              {freshness.description}
+            </Tag>
+          </div>
         </div>
         {renderUncertaintyBar(intel, RESOURCE_META[key].accent)}
+        <div className="flex items-center justify-between text-[9px] text-slate-500">
+          <span>置信度: {Math.round(intel.confidence * 100)}%</span>
+          <span>{SOURCE_LABEL[intel.source]}</span>
+        </div>
       </div>
     );
 
-    const tooltipTitle = `${description} · Last updated ${intel.lastUpdatedMinutesAgo} min ago`;
+    const tooltipTitle = (
+      <div>
+        <div>显示模式: {displayMode === 'precise' ? '精确' : displayMode === 'range' ? '范围' : displayMode === 'rough' ? '粗略' : '未知'}</div>
+        <div>置信度: {Math.round(intel.confidence * 100)}%</div>
+        <div>信息来源: {SOURCE_LABEL[intel.source]}</div>
+        <div>更新时间: {intel.lastUpdatedMinutesAgo}分钟前</div>
+        {displayMode === 'range' && (
+          <div>估计范围: {formatRangeText(intel.min, intel.max)}</div>
+        )}
+      </div>
+    );
+
+    // 根据置信度设置边框颜色
+    let borderClass = 'border-slate-800/80';
+    if (intel.confidence >= 0.8) {
+      borderClass = 'border-emerald-500/40 hover:border-emerald-500/60';
+    } else if (intel.confidence >= 0.6) {
+      borderClass = 'border-blue-500/40 hover:border-blue-500/60';
+    } else if (intel.confidence >= 0.4) {
+      borderClass = 'border-amber-500/40 hover:border-amber-500/60';
+    } else if (intel.confidence >= 0.2) {
+      borderClass = 'border-red-500/40 hover:border-red-500/60';
+    } else {
+      borderClass = 'border-slate-600/40 hover:border-slate-500/60 animate-pulse';
+    }
 
     return (
       <Tooltip title={tooltipTitle} mouseEnterDelay={0.1} mouseLeaveDelay={0.05}>
         <div
           className={[
-            'relative rounded-lg border border-slate-800/80 px-2 py-1.5 bg-slate-900/60',
+            'relative rounded-lg border px-2 py-1.5 bg-slate-900/60',
             'backdrop-blur-md shadow-[0_0_0_1px_rgba(15,23,42,0.6)]',
-            highConfidence
-              ? 'hover:border-emerald-500/60'
-              : mediumConfidence
-                ? 'hover:border-amber-500/60'
-                : 'hover:border-slate-500/60 animate-pulse',
+            'transition-all duration-200',
+            borderClass
           ].join(' ')}
         >
-          {/* subtle noise / glow for low confidence */}
-          {!highConfidence && (
+          {/* 低置信度的视觉效果 */}
+          {intel.confidence < 0.6 && (
             <div className="pointer-events-none absolute inset-0 rounded-lg bg-[radial-gradient(circle_at_top,rgba(248,250,252,0.15),transparent_55%)] opacity-50 mix-blend-screen" />
           )}
           {content}
@@ -174,11 +203,16 @@ const OpponentIntel: React.FC<OpponentIntelProps> = ({
       <header className="flex items-center justify-between px-4 py-2 border-b border-slate-800/80">
         <div className="flex items-center gap-2 text-xs text-slate-300 tracking-[0.18em] uppercase">
           <EyeOff size={14} className="text-slate-400" />
-          <span>Opponent Intel · Fog of War</span>
+          <span>对手情报 · 战争迷雾</span>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">
-          Military · Cyber-Noir
-        </span>
+        <div className="flex items-center gap-2">
+          <Tooltip title="情报系统说明">
+            <Info size={12} className="text-slate-500 cursor-help" />
+          </Tooltip>
+          <span className="text-[10px] text-slate-500 font-mono">
+            实时情报分析
+          </span>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
@@ -219,7 +253,7 @@ const OpponentIntel: React.FC<OpponentIntelProps> = ({
                   className="px-2 py-0.5 rounded-full border border-slate-700/80 text-[10px] text-slate-300 hover:border-amber-400/70 hover:text-amber-200 transition-colors font-mono"
                   onClick={() => onProbeIntel?.(op.id)}
                 >
-                  Probe
+                  探测
                 </button>
               </div>
             </div>
@@ -247,7 +281,7 @@ const OpponentIntel: React.FC<OpponentIntelProps> = ({
 
         {opponents.length === 0 && (
           <div className="h-full flex items-center justify-center text-[11px] text-slate-600 font-mono">
-            No opponent intel available.
+            暂无对手情报数据
           </div>
         )}
       </div>

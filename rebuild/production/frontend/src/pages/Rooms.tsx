@@ -9,6 +9,7 @@ import RoomCard from '../components/RoomCard';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
 import { gameAPI } from '../services/game';
+import { HelpButton } from '../components/HelpButton';
 import UserRegistryPanel from '../components/UserRegistryPanel';
 import OnlineRoomsPanel from '../components/OnlineRoomsPanel';
 
@@ -210,13 +211,48 @@ function Rooms() {
   };
 
   const handleResume = async (roomId: string) => {
+    console.log('尝试继续游戏，房间ID:', roomId);
     setActionRoomId(roomId);
     try {
+      console.log('调用 getActiveSessionByRoom API...');
+      
+      // 显示加载提示
+      const hideLoading = message.loading('正在定位游戏会话...', 0);
+      
       const session = await gameAPI.getActiveSessionByRoom(roomId);
+      console.log('获取到游戏会话:', session);
+      
+      hideLoading();
       message.success('已定位到进行中的对局，正在进入战场');
       navigate(`/game/${session.sessionId}`);
     } catch (err) {
-      message.error(getErrMsg(err, '无法继续游戏，当前房间可能没有进行中的对局'));
+      console.error('继续游戏失败:', err);
+      
+      // 提供更详细的错误信息
+      let errorMessage = '无法继续游戏';
+      
+      if (err && typeof err === 'object' && 'response' in err) {
+        const response = (err as any).response;
+        if (response?.status === 404) {
+          errorMessage = '当前房间没有进行中的对局，可能游戏已结束或尚未开始';
+        } else if (response?.status === 403) {
+          errorMessage = '您没有权限访问此游戏会话';
+        } else if (response?.data?.message) {
+          errorMessage = response.data.message;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      
+      message.error(errorMessage);
+      
+      // 建议用户刷新房间列表
+      message.info('建议刷新房间列表获取最新状态', 3);
+      
+      // 自动刷新房间列表
+      setTimeout(() => {
+        loadRooms();
+      }, 1000);
     } finally {
       setActionRoomId(null);
     }
@@ -238,6 +274,7 @@ function Rooms() {
             <h1 className="rooms-title" style={{ margin: 0 }}>游戏房间</h1>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <HelpButton />
             <Button
               size="small"
               icon={<TeamOutlined />}

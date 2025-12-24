@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Card, Button, List, Input, Space, Tag, message, Modal, Divider, Typography } from 'antd';
+import { ArrowLeftOutlined as ArrowLeft } from '@ant-design/icons';
 import {
   gameAPI,
   ReviewDecisions,
@@ -10,11 +12,13 @@ import { useAuthStore } from '../stores/authStore';
 import { wsService } from '../services/websocket';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
+import { HelpButton } from '../components/HelpButton';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
 function HostReviewPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   useAuthStore(); // 预留，如需权限判断可获取 user
   const socketStatus = useSocket();
   useMessageRouter();
@@ -207,8 +211,22 @@ function HostReviewPage() {
   }
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      <Card>
+    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', minHeight: '100vh' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <Button
+          icon={<ArrowLeft />}
+          onClick={() => navigate(-1)}
+          style={{ marginRight: 8 }}
+        >
+          返回
+        </Button>
+        <Button
+          onClick={() => navigate(`/game/${sessionId}/state`)}
+        >
+          游戏状态
+        </Button>
+      </div>
+      <Card style={{ maxHeight: '80vh', overflowY: 'auto' }}>
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <div>
             <Title level={3}>主持人审核</Title>
@@ -277,6 +295,7 @@ function HostReviewPage() {
 
           <Card title="操作">
             <Space>
+              <HelpButton />
               <Button type="primary" onClick={() => setEventModalVisible(true)}>
                 添加临时事件
               </Button>
