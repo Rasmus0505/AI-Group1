@@ -32,15 +32,46 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) throw new AppError('房间不存在', 404);
 
+  // Default DeepSeek configuration tuned for "Every Wall is a Door"
+  const defaultBodyTemplate = {
+    model: 'deepseek-chat',
+    messages: [
+      {
+        role: 'system',
+        content:
+          'You are the narrative and rules engine for a multiplayer business simulation game called "Every Wall is a Door" (凡墙皆是门). ' +
+          'The game has multiple entities (A, B, C, D...), each representing a company with a Chinese name. ' +
+          'Time is advanced in quarterly rounds (each round ≈ one quarter, four rounds ≈ one year). In each round: ' +
+          'players submit text decisions for their entities; you update each entity state (cash balance, passive income, passive expense, market share, reputation, innovation, etc.) ' +
+          'STRICTLY following the rules: player decisions FIRST (if an entity gives no decision this round, only apply passive income/expense and ongoing events, NEVER invent proactive actions), ' +
+          'cross-entity effects must be considered (one entity decision can affect others and the market), ' +
+          'you classify events as positive / negative / neutral and allow multi-round events, ' +
+          'you are inspired by an underlying I-Ching hexagram for randomness and narrative flavor but you must keep business logic realistic, ' +
+          'you MUST NOT initiate cooperation between entities on your own and MUST NOT replace players decisions. ' +
+          'At the end of each round you MUST produce: (1) a coherent narrative, (2) a structured per-entity panel with updated attributes and deltas, ' +
+          '(3) a leaderboard with scores (e.g. profit, market share), (4) three short cards for risk, opportunity and current benefit, and (5) a list of achievements for key decisions.'
+      },
+      {
+        role: 'user',
+        content: '{{prompt}}'
+      }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000,
+    stream: true
+  };
+
   return prisma.hostConfig.create({
     data: {
       roomId,
       createdBy: userId,
       apiConfig: {},
-      apiProvider: null,
-      apiEndpoint: null,
-      apiHeaders: {},
-      apiBodyTemplate: {},
+      apiProvider: 'deepseek',
+      apiEndpoint: 'https://api.deepseek.com/v1/chat/completions',
+      apiHeaders: {
+        'Content-Type': 'application/json'
+      },
+      apiBodyTemplate: defaultBodyTemplate,
       totalDecisionEntities: room.maxPlayers,
       humanPlayerCount: Math.max(room.currentPlayers, 1),
       aiPlayerCount: 0,

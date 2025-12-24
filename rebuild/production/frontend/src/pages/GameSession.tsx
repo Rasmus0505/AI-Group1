@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Input, Button, Tag, List, message,
-  Row, Col, Avatar, Progress, Divider, Spin
+  Row, Col, Avatar, Progress, Divider, Spin, Space
 } from 'antd';
 import {
   Users, Zap, Coins, Trophy,
@@ -15,6 +15,11 @@ import { wsService } from '../services/websocket';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
 import { GlassCard } from '../components/GlassCard';
+import ResourcePanel from '../components/ResourcePanel';
+import NarrativeFeed from '../components/NarrativeFeed';
+import ChatSystem from '../components/ChatSystem';
+import OpponentIntel, { OpponentIntelRecord } from '../components/OpponentIntel';
+import type { TurnResultDTO } from '../types/turnResult';
 
 const { TextArea } = Input;
 
@@ -43,11 +48,57 @@ function GameSessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [displayNarrative] = useState('欢迎来到游戏，正在等待第一回合开始...');
+  const [recommendedOptions, setRecommendedOptions] = useState<Array<{
+    option_id: string;
+    text: string;
+    expected_effect: string;
+    category: string;
+  }>>([]);
+  const [advancedView, setAdvancedView] = useState(false);
+  const [advancedSharedSnippet, setAdvancedSharedSnippet] = useState('');
+  const [turnResult, setTurnResult] = useState<TurnResultDTO | null>(null);
 
   const isTimeout = useMemo(() => {
     if (!session?.decisionDeadline) return false;
     return currentTime > new Date(session.decisionDeadline).getTime();
   }, [session?.decisionDeadline, currentTime]);
+
+  const getPlaceholderText = useMemo(() => {
+    return () => {
+      if (!session) return '正在加载...';
+
+      // Check if current stage is not decision phase
+      if (session.roundStatus !== 'decision') {
+        return '当前非决策阶段，无法提交决策';
+      }
+
+      // Calculate remaining time
+      const remainingSeconds = session.decisionDeadline
+        ? Math.floor((new Date(session.decisionDeadline).getTime() - currentTime) / 1000)
+        : 0;
+
+      // Urgent time warning
+      if (remainingSeconds > 0 && remainingSeconds < 60) {
+        return '时间紧迫！请快速做出决策并提交...';
+      }
+
+      // First round guidance
+      if (session.currentRound === 1) {
+        if (recommendedOptions.length > 0) {
+          return `作为这片废土的幸存者，你接下来打算怎么做？可以输入自定义决策，或选择下方AI推荐的${recommendedOptions.length}个选项之一`;
+        }
+        return '作为这片废土的幸存者，你接下来打算怎么做？描述你的精确意图...';
+      }
+
+      // Has recommended options
+      if (recommendedOptions.length > 0) {
+        return `可以输入自定义决策，或选择下方AI推荐的${recommendedOptions.length}个选项之一`;
+      }
+
+      // Default placeholder
+      return '描述你的决策行动，越具体越好...';
+    };
+  }, [session, currentTime, recommendedOptions.length]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -85,14 +136,53 @@ function GameSessionPage() {
     [sessionId, session?.currentRound]
   );
 
+  const loadTurnResult = useMemo(
+    () => async () => {
+      if (!sessionId) return;
+      try {
+        const state = await gameAPI.getGameState(sessionId);
+        const rawResult = state.inferenceResult?.result as any;
+        const uiTurn: TurnResultDTO | undefined =
+          rawResult?.uiTurnResult || (state.gameState as any)?.uiTurnResult;
+        setTurnResult(uiTurn || null);
+      } catch {
+        // 推演结果是增量能力，失败时静默忽略
+        setTurnResult(null);
+      }
+    },
+    [sessionId]
+  );
+
   useEffect(() => {
     if (!sessionId) return;
     loadSession();
-  }, [sessionId, loadSession]);
+    // 同步一次当前回合的推演摘要（若已存在）
+    loadTurnResult();
+  }, [sessionId, loadSession, loadTurnResult]);
 
   useEffect(() => {
     loadDecisions();
   }, [loadDecisions]);
+
+  // Load recommended decision options
+  useEffect(() => {
+    if (!sessionId || !session || session.roundStatus !== 'decision') {
+      setRecommendedOptions([]);
+      return;
+    }
+
+    const loadOptions = async () => {
+      try {
+        const data = await gameAPI.getDecisionOptions(sessionId, session.currentRound);
+        setRecommendedOptions(data.options || []);
+      } catch (err) {
+        // Silently fail - options are optional
+        setRecommendedOptions([]);
+      }
+    };
+
+    loadOptions();
+  }, [sessionId, session?.currentRound, session?.roundStatus]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -106,6 +196,14 @@ function GameSessionPage() {
       // 决策阶段提示
       if (payload.roundStatus === 'decision') {
         message.info(`第 ${payload.currentRound} 回合决策开始`);
+      }
+
+      // 当推演进入 inference / result 阶段时，刷新一次回合结果视图模型
+      if (
+        (payload.roundStatus === 'inference' || payload.roundStatus === 'result') &&
+        sessionId
+      ) {
+        loadTurnResult();
       }
 
       // 当回合进入结果阶段时，自动跳转到推演结果页
@@ -122,7 +220,7 @@ function GameSessionPage() {
       wsService.off('decision_status_update', handleDecisionStatusUpdate);
       wsService.off('game_state_update', handleGameStateUpdate);
     };
-  }, [sessionId, loadDecisions]);
+  }, [sessionId, loadDecisions, loadTurnResult, navigate]);
 
   const handleSubmitDecision = async () => {
     if (!sessionId || !session) return;
@@ -150,6 +248,157 @@ function GameSessionPage() {
       <div className="flex flex-col items-center justify-center min-h-screen">
         <Spin size="large" />
         <p className="mt-4 text-slate-400">正在同步战场状态...</p>
+      </div>
+    );
+  }
+
+  // 为高级视图派生一个简单的阶段状态，用于 NarrativeFeed 等组件
+  const advancedPhase: 'READING' | 'DECIDING' | 'RESOLVING' =
+    session.roundStatus === 'decision'
+      ? 'DECIDING'
+      : session.roundStatus === 'result'
+      ? 'RESOLVING'
+      : 'READING';
+
+  const remainingSecondsNumeric = useMemo(() => {
+    if (!session.decisionDeadline) return 0;
+    const end = new Date(session.decisionDeadline).getTime();
+    const diff = Math.floor((end - currentTime) / 1000);
+    return diff > 0 ? diff : 0;
+  }, [session.decisionDeadline, currentTime]);
+
+  // 高级视图：基于真实会话状态，组合新的控制台布局
+  if (advancedView) {
+    const playerMoney = 720;
+    const playerForce = 65;
+    const playerInfluence = 58;
+    const playerIntel = 80;
+
+    const opponentsIntel: OpponentIntelRecord[] = decisions
+      .filter(item => item.userId !== user?.userId)
+      .map(item => {
+        const submitted = item.status === 'submitted';
+        const baseWealthMin = 80_000;
+        const baseWealthMax = submitted ? 160_000 : 220_000;
+        const wealthConfidence = submitted ? 0.75 : 0.35;
+        const powerConfidence = submitted ? 0.7 : 0.45;
+        const influenceConfidence = submitted ? 0.65 : 0.4;
+
+        const minutesAgo = Math.max(
+          1,
+          Math.floor(
+            (Date.now() - new Date(item.submittedAt || Date.now()).getTime()) / 60_000
+          )
+        );
+
+        return {
+          id: item.userId || String(item.playerIndex),
+          name: `玩家 ${item.playerIndex}`,
+          status: submitted ? 'thinking' : 'online',
+          resources: {
+            wealth: {
+              value: baseWealthMax * 0.85,
+              min: baseWealthMin,
+              max: baseWealthMax,
+              confidence: wealthConfidence,
+              lastUpdatedMinutesAgo: minutesAgo,
+              source: submitted ? 'private_leak' : 'public_signal',
+            },
+            power: {
+              value: 70,
+              min: 40,
+              max: 90,
+              confidence: powerConfidence,
+              lastUpdatedMinutesAgo: minutesAgo + 1,
+              source: 'historical_model',
+            },
+            influence: {
+              value: 55,
+              min: 30,
+              max: 80,
+              confidence: influenceConfidence,
+              lastUpdatedMinutesAgo: minutesAgo + 2,
+              source: 'historical_model',
+            },
+          },
+        };
+      });
+
+    const narrativeText = `
+当前处于第 ${session.currentRound} 回合，阶段为 ${session.roundStatus}。
+请关注队友决策进度与对手情报波动，在正式界面中完成本回合决策提交。
+    `;
+
+    return (
+      <div className="min-h-screen bg-[#050507] text-slate-100 px-6 py-6">
+        <div className="max-w-6xl mx-auto h-screen max-h-[900px] flex flex-col gap-4">
+          <header className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+                Advanced session view
+              </span>
+              <h1 className="mt-1 text-lg font-semibold text-slate-100">
+                Game console for session {sessionId}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <span className="font-mono">ROUND {session.currentRound}</span>
+              <span className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]" />
+              <Button size="small" onClick={() => setAdvancedView(false)}>
+                返回标准视图
+              </Button>
+              <Button size="small" onClick={() => navigate('/rooms')}>
+                退出房间
+              </Button>
+            </div>
+          </header>
+
+          <main className="flex-1 flex flex-col gap-3">
+            <div className="flex-1 grid grid-cols-12 gap-3">
+              <div className="col-span-3 flex flex-col gap-2">
+                <ResourcePanel
+                  player={{
+                    money: playerMoney,
+                    force: playerForce,
+                    influence: playerInfluence,
+                    intelLevel: playerIntel,
+                  }}
+                  opponents={[]}
+                />
+                <OpponentIntel
+                  opponents={opponentsIntel}
+                  onOpenPrivateChannel={id => {
+                    // TODO: 在后续版本中接入右侧 ChatSystem 的私聊频道
+                    message.info(`准备对 ${id} 发起私聊（占位逻辑）`);
+                  }}
+                  onProbeIntel={id => {
+                    // TODO: 将来可以接入“情报刺探”动作（例如调用后端 trade/intel 接口）
+                    message.info(`准备对 ${id} 发起情报刺探（占位逻辑）`);
+                  }}
+                />
+              </div>
+
+              <div className="col-span-6">
+                <NarrativeFeed
+                  phase={advancedPhase}
+                  fullText={narrativeText}
+                  totalSeconds={300}
+                  remainingSeconds={remainingSecondsNumeric}
+                  onShareSnippet={setAdvancedSharedSnippet}
+                />
+              </div>
+
+              <div className="col-span-3">
+                <ChatSystem lastSharedSnippet={advancedSharedSnippet} />
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 text-center mt-1">
+              此视图为高级信息控制台，当前版本仅用于辅助阅读与观战。
+              <span className="ml-1">请在标准界面中完成正式决策提交与确认。</span>
+            </div>
+          </main>
+        </div>
       </div>
     );
   }
@@ -191,6 +440,9 @@ function GameSessionPage() {
               <div className={`w-2 h-2 rounded-full ${socketStatus === 'connected' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-rose-500'}`} />
               <span className="text-sm font-medium">{socketStatus === 'connected' ? 'LIVE' : 'OFFLINE'}</span>
             </div>
+            <Button size="small" onClick={() => setAdvancedView(true)}>
+              高级视图
+            </Button>
 
             {/* 当回合处于结果阶段时，给玩家一个显式入口查看推演结果 */}
             {session.roundStatus === 'result' && (
@@ -312,15 +564,43 @@ function GameSessionPage() {
                   rows={10}
                   value={decisionText}
                   onChange={e => setDecisionText(e.target.value)}
-                  placeholder="作为这片废土的幸存者，你接下来打算怎么做？描述你的精确意图..."
+                  placeholder={getPlaceholderText()}
                   className="decision-input"
                   style={{ flex: 1 }}
                 />
+                {recommendedOptions.length > 0 && (
+                  <div className="recommended-options" style={{ marginTop: 8 }}>
+                    <div className="text-xs text-slate-500 mb-2" style={{ fontWeight: 500 }}>
+                      AI 推荐选项
+                    </div>
+                    <Space direction="vertical" style={{ width: '100%' }} size="small">
+                      {recommendedOptions.map((option) => (
+                        <Button
+                          key={option.option_id}
+                          block
+                          style={{ 
+                            textAlign: 'left', 
+                            height: 'auto', 
+                            padding: '8px 12px',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word'
+                          }}
+                          onClick={() => setDecisionText(option.text)}
+                        >
+                          <div style={{ fontWeight: 500, marginBottom: 4 }}>{option.text}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280', opacity: 0.8 }}>
+                            {option.expected_effect}
+                          </div>
+                        </Button>
+                      ))}
+                    </Space>
+                  </div>
+                )}
                 <div className="decision-actions">
                   <Button
                     type="primary"
                     size="middle"
-                    className="cta-compact"
+                    className="cta-compact btn-strong glow"
                     loading={submitting}
                     onClick={handleSubmitDecision}
                     disabled={isTimeout || session.roundStatus !== 'decision'}
@@ -340,20 +620,86 @@ function GameSessionPage() {
                   <Trophy size={16} className="text-amber-500" /> 全局排行
                 </div>
               </div>
-              <List
-                className="list-tight"
-                size="small"
-                dataSource={[1, 2, 3]}
-                renderItem={(pos) => (
-                  <div className="flex items-center gap-3 py-1">
-                    <span className={`text-lg font-black ${pos === 1 ? 'text-amber-500' : 'text-slate-400'}`}>0{pos}</span>
-                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${100 - pos * 20}%` }} />
-                    </div>
-                  </div>
-                )}
-              />
+              {turnResult && turnResult.leaderboard.length > 0 ? (
+                <List
+                  className="list-tight"
+                  size="small"
+                  dataSource={turnResult.leaderboard}
+                  renderItem={(entry) => {
+                    const maxScore =
+                      turnResult.leaderboard.reduce(
+                        (max, e) => (e.score > max ? e.score : max),
+                        1
+                      ) || 1;
+                    const width = Math.max(8, Math.round((entry.score / maxScore) * 100));
+                    return (
+                      <div className="flex items-center gap-3 py-1">
+                        <span
+                          className={`text-lg font-black ${
+                            entry.rank === 1 ? 'text-amber-500' : 'text-slate-400'
+                          }`}
+                        >
+                          {String(entry.rank).padStart(2, '0')}
+                        </span>
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-500 transition-all duration-300"
+                            style={{ width: `${width}%` }}
+                          />
+                        </div>
+                        {typeof entry.rankChange === 'number' && entry.rankChange !== 0 && (
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {entry.rankChange > 0
+                              ? `▲${entry.rankChange}`
+                              : `▼${Math.abs(entry.rankChange)}`}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+              ) : (
+                <div className="text-xs text-slate-400 py-6 text-center">
+                  等待本回合推演完成后生成排行榜...
+                </div>
+              )}
             </GlassCard>
+
+            {turnResult && (
+              <GlassCard className="card-panel h-full mt-3">
+                <div className="card-header-line">
+                  <div className="card-title-sm flex items-center gap-2">
+                    <Target size={16} className="text-rose-500" /> 本回合评估
+                  </div>
+                </div>
+                <div className="space-y-2 text-xs text-slate-700">
+                  {turnResult.riskCard && (
+                    <div className="flex items-start gap-2">
+                      <span className="mt-[2px] text-rose-500 font-mono text-[10px] uppercase tracking-widest">
+                        Risk
+                      </span>
+                      <p className="leading-snug">{turnResult.riskCard}</p>
+                    </div>
+                  )}
+                  {turnResult.opportunityCard && (
+                    <div className="flex items-start gap-2">
+                      <span className="mt-[2px] text-emerald-500 font-mono text-[10px] uppercase tracking-widest">
+                        Opportunity
+                      </span>
+                      <p className="leading-snug">{turnResult.opportunityCard}</p>
+                    </div>
+                  )}
+                  {turnResult.benefitCard && (
+                    <div className="flex items-start gap-2">
+                      <span className="mt-[2px] text-sky-500 font-mono text-[10px] uppercase tracking-widest">
+                        Benefit
+                      </span>
+                      <p className="leading-snug">{turnResult.benefitCard}</p>
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            )}
 
             <GlassCard className="card-panel h-full">
               <div className="card-header-line">

@@ -17,12 +17,16 @@ import Trade from './pages/Trade';
 import GameSave from './pages/GameSave';
 import Tasks from './pages/Tasks';
 import StrategyAnalysis from './pages/StrategyAnalysis';
+import DecisionConsole from './pages/DecisionConsole';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useClickExplosion } from './hooks/useClickExplosion';
 import './App.css';
 
 const { Content } = Layout;
 
 function App() {
+  useClickExplosion();
+
   return (
     <BrowserRouter>
       <Layout style={{ minHeight: '100vh' }}>
@@ -129,6 +133,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Tasks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/game/:sessionId/decision-console"
+              element={
+                <ProtectedRoute>
+                  <DecisionConsole />
                 </ProtectedRoute>
               }
             />

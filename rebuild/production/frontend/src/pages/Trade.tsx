@@ -260,6 +260,7 @@ const TradePage: React.FC = () => {
             </Title>
             <Button
               type="primary"
+              className="btn-strong glow"
               icon={<SwapOutlined />}
               onClick={() => setRequestModalVisible(true)}
             >

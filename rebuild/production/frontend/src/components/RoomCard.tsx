@@ -8,11 +8,21 @@ interface RoomCardProps {
   onLeave: (roomId: string) => void;
   onClose?: (roomId: string) => void;
   onKillGame?: (roomId: string) => void;
+  onResume?: (roomId: string) => void;
   isHost?: boolean;
   loading?: boolean;
 }
 
-export function RoomCard({ room, onJoin, onLeave, onClose, onKillGame, isHost, loading }: RoomCardProps) {
+export function RoomCard({
+  room,
+  onJoin,
+  onLeave,
+  onClose,
+  onKillGame,
+  onResume,
+  isHost,
+  loading,
+}: RoomCardProps) {
   const hostLabel = room.hostName || room.hostId || '未知房主';
   const isFull = room.currentPlayers >= room.maxPlayers;
   const isPlaying = room.status === 'playing';
@@ -46,11 +56,17 @@ export function RoomCard({ room, onJoin, onLeave, onClose, onKillGame, isHost, l
         <Button
           className="btn-dark"
           size="small"
-          disabled={isFull || isPlaying}
+          disabled={isFull || (isPlaying && !isJoined)}
           loading={loading}
-          onClick={() => onJoin(room.id)}
+          onClick={() => {
+            if (isJoined && isPlaying && onResume) {
+              onResume(room.id);
+            } else {
+              onJoin(room.id);
+            }
+          }}
         >
-          {isPlaying ? '进行中' : isFull ? '已满' : '加入'}
+          {isJoined && isPlaying ? '继续游戏' : isPlaying ? '进行中' : isFull ? '已满' : '加入'}
         </Button>
         {isJoined && (
           <Button className="btn-light" size="small" danger={false} loading={loading} onClick={() => onLeave(room.id)}>

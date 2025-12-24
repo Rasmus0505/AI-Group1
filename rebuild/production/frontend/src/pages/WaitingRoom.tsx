@@ -188,7 +188,11 @@ function WaitingRoom() {
               </Tag>
               {currentRoom?.hostId === user?.userId && (
                 <>
-                  <Button type="primary" onClick={() => navigate(`/rooms/${roomId}/host-setup`)}>
+                  <Button
+                    type="primary"
+                    className="btn-strong glow"
+                    onClick={() => navigate(`/rooms/${roomId}/host-setup`)}
+                  >
                     主持人配置
                   </Button>
                   <Button
