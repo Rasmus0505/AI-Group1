@@ -217,8 +217,11 @@ export interface TurnResultDTO {
   /** 周易卦象 */
   hexagram?: TurnHexagram;
   
-  /** 决策选项（供下回合使用） */
+  /** 决策选项（供下回合使用） - 旧格式，全局选项 */
   options?: TurnOption[];
+  
+  /** 各主体专属决策选项（供下回合使用） - 新格式，按主体分组 */
+  perEntityOptions?: Record<string, TurnOption[]>;
   
   /** 财务核算 */
   ledger?: TurnLedger;

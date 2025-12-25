@@ -803,17 +803,30 @@ export class AIService {
     prompt += '    "decisionCost": 10000,\n';
     prompt += '    "balance": 1010000\n';
     prompt += '  },\n';
-    prompt += '  "options": [\n';
-    prompt += '    {\n';
-    prompt += '      "id": "1",\n';
-    prompt += '      "title": "选项标题",\n';
-    prompt += '      "description": "选项描述",\n';
-    prompt += '      "expectedDelta": { "cash": -50000, "市场份额": 5 },\n';
-    prompt += '      "category": "attack|defense|cooperation|explore|trade",\n';
-    prompt += '      "riskLevel": "low|medium|high"\n';
-    prompt += '    }\n';
-    prompt += '  ],\n';
-    prompt += '  // 注意：expectedDelta 中 cash 是实际金额（如 -50000 表示减少5万元），\n';
+    prompt += '  "perEntityOptions": {\n';
+    prompt += '    "A": [\n';
+    prompt += '      {\n';
+    prompt += '        "id": "A1",\n';
+    prompt += '        "title": "针对主体A当前局势的选项标题",\n';
+    prompt += '        "description": "基于主体A本回合决策结果和当前状态生成的策略建议",\n';
+    prompt += '        "expectedDelta": { "cash": -50000, "市场份额": 5 },\n';
+    prompt += '        "category": "attack|defense|cooperation|explore|trade",\n';
+    prompt += '        "riskLevel": "low|medium|high"\n';
+    prompt += '      }\n';
+    prompt += '    ],\n';
+    prompt += '    "B": [\n';
+    prompt += '      {\n';
+    prompt += '        "id": "B1",\n';
+    prompt += '        "title": "针对主体B当前局势的选项标题",\n';
+    prompt += '        "description": "基于主体B本回合决策结果和当前状态生成的策略建议",\n';
+    prompt += '        "expectedDelta": { "cash": -30000, "品牌声誉": 3 },\n';
+    prompt += '        "category": "attack|defense|cooperation|explore|trade",\n';
+    prompt += '        "riskLevel": "low|medium|high"\n';
+    prompt += '      }\n';
+    prompt += '    ]\n';
+    prompt += '  },\n';
+    prompt += '  // 注意：perEntityOptions 为每个主体单独生成3个策略选项，基于该主体本回合的实际决策结果\n';
+    prompt += '  // expectedDelta 中 cash 是实际金额（如 -50000 表示减少5万元），\n';
     prompt += '  // 其他属性是百分点变化（如 市场份额: 5 表示增加5个百分点，不是5%）\n';
     prompt += '  "riskCard": "企业风险简评",\n';
     prompt += '  "opportunityCard": "企业机会简评",\n';
@@ -835,7 +848,11 @@ export class AIService {
     prompt += '4. perEntityPanel 数量必须与房间配置的主体数量一致\n';
     prompt += '5. 未收到指令的主体只结算被动收支，不触发主动事件\n';
     prompt += '6. 若余额接近被动支出临界，必须在 cashFlowWarning 中警示\n';
-    prompt += '7. options 提供 3 个**下回合**的策略选项（不是本回合的），附带 expectedDelta 预期变动\n';
+    prompt += '7. **perEntityOptions 必须为每个主体单独生成3个策略选项**：\n';
+    prompt += '   - 选项必须基于该主体**本回合实际执行的决策结果**来生成\n';
+    prompt += '   - 不要把上回合的预设选项照搬，而是根据当前局势动态生成新选项\n';
+    prompt += '   - 每个主体的选项应该反映其独特的处境、资源状况和战略机会\n';
+    prompt += '   - 选项ID格式为"主体ID+序号"，如A1、A2、A3、B1、B2、B3\n';
     prompt += '8. 主体 id 使用 A/B/C/D，不要使用 emoji\n';
 
     logger.info(`Prompt built successfully`, {
@@ -962,7 +979,7 @@ export class AIService {
       model: 'gpt-3.5-turbo',
       messages,
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 8000,
     };
   }
 

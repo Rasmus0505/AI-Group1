@@ -30,7 +30,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 10000,
       stream: false
     },
     description: 'DeepSeek Chat - Default recommended model'
@@ -53,7 +53,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 8000,
       stream: false
     },
     description: 'DeepSeek Reasoner - Enhanced reasoning capability'
@@ -77,7 +77,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 8000
     },
     description: 'OpenAI GPT-4 Turbo - High performance model'
   },
@@ -99,7 +99,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 8000
     },
     description: 'OpenAI GPT-4 - Most capable model'
   },
@@ -121,7 +121,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 4000
     },
     description: 'OpenAI GPT-3.5 Turbo - Cost-effective option'
   },
@@ -139,7 +139,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
           content: '{{prompt}}'
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 8000,
       temperature: 0.7
     },
     description: 'Anthropic Claude 3.5 Sonnet - Advanced reasoning'
@@ -157,7 +157,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
           content: '{{prompt}}'
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 8000,
       temperature: 0.7
     },
     description: 'Anthropic Claude 3 Opus - Most capable model'
@@ -175,7 +175,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
           content: '{{prompt}}'
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 8000,
       temperature: 0.7
     },
     description: 'Anthropic Claude 3 Haiku - Fast and efficient'
@@ -198,7 +198,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2000
+        maxOutputTokens: 8000
       }
     },
     description: 'Google Gemini 1.5 Pro - Multimodal capabilities'
@@ -220,7 +220,7 @@ export const PRESET_MODELS: AIModelConfig[] = [
       ],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2000
+        maxOutputTokens: 8000
       }
     },
     description: 'Google Gemini 1.5 Flash - Fast and efficient'

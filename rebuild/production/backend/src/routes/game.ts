@@ -2719,6 +2719,15 @@ router.post(
           },
         });
 
+        // 清理Redis中的游戏初始化数据（游戏自然结束后清理）
+        try {
+          const initKey = `game:init:${session.roomId}`;
+          await redis.del(initKey);
+          logger.info(`Cleaned up game init data for room ${session.roomId} after game finished`);
+        } catch (redisErr) {
+          logger.warn('Failed to clean up game init data on finish:', redisErr);
+        }
+
         // 广播游戏结束通知
         io.to(session.roomId).emit('game_finished', {
           sessionId,

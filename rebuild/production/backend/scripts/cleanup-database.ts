@@ -150,8 +150,88 @@ async function cleanupDatabase() {
   }
 }
 
-cleanupDatabase().catch((error) => {
-  console.error('脚本执行失败:', error);
-  process.exit(1);
-});
+/**
+ * 清理 Redis 中的游戏初始化数据
+ * 可以指定房间ID，或清理所有
+ */
+async function cleanupRedisGameInit(roomId?: string) {
+  console.log('========================================');
+  console.log('Redis 游戏初始化数据清理');
+  console.log('========================================\n');
+
+  try {
+    await redis.connect();
+    console.log('✓ Redis 连接成功\n');
+
+    if (roomId) {
+      // 清理指定房间的初始化数据
+      const key = `game:init:${roomId}`;
+      const exists = await redis.exists(key);
+      if (exists) {
+        await redis.del(key);
+        console.log(`✓ 已删除房间 ${roomId} 的初始化数据`);
+      } else {
+        console.log(`  房间 ${roomId} 没有初始化数据`);
+      }
+    } else {
+      // 清理所有游戏初始化数据
+      const keys = await redis.keys('game:init:*');
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        console.log(`✓ 已删除 ${keys.length} 个房间的初始化数据`);
+        keys.forEach(key => {
+          const roomId = key.replace('game:init:', '');
+          console.log(`  - 房间 ${roomId}`);
+        });
+      } else {
+        console.log('  没有找到任何游戏初始化数据');
+      }
+    }
+
+    // 同时清理会话状态数据
+    const sessionKeys = await redis.keys('session:state:*');
+    if (sessionKeys.length > 0) {
+      await redis.del(...sessionKeys);
+      console.log(`✓ 已删除 ${sessionKeys.length} 个会话状态数据`);
+    }
+
+    console.log('\n========================================');
+    console.log('Redis 清理完成！');
+    console.log('========================================\n');
+
+  } catch (error: any) {
+    console.error('❌ Redis 清理失败:', error.message);
+    console.error('   请检查 REDIS_URL 配置和 Redis 服务状态');
+  } finally {
+    await redis.quit();
+  }
+}
+
+// 根据命令行参数决定执行哪个清理
+const args = process.argv.slice(2);
+const cleanRedis = args.includes('--redis') || args.includes('-r');
+const cleanAll = args.includes('--all') || args.includes('-a');
+const roomIdArg = args.find(arg => arg.startsWith('--room='))?.split('=')[1];
+
+if (cleanAll) {
+  // 清理所有：数据库 + Redis
+  cleanupDatabase()
+    .then(() => cleanupRedisGameInit())
+    .catch((error) => {
+      console.error('脚本执行失败:', error);
+      process.exit(1);
+    });
+} else if (cleanRedis) {
+  // 只清理 Redis
+  cleanupRedisGameInit(roomIdArg).catch((error) => {
+    console.error('脚本执行失败:', error);
+    process.exit(1);
+  });
+} else {
+  // 默认只清理数据库
+  cleanupDatabase().catch((error) => {
+    console.error('脚本执行失败:', error);
+    process.exit(1);
+  });
+}
 

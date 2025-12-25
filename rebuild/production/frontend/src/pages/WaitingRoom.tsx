@@ -18,6 +18,8 @@ interface RoomRealtimeState {
   roomId: string;
   players?: string[]; // 添加可选标记，因为可能为undefined
   status: string;
+  hostId?: string;
+  hostOnline?: boolean;
 }
 
 function WaitingRoom() {
@@ -239,6 +241,14 @@ function WaitingRoom() {
           {currentRoom ? (
             <Descriptions column={1} size="small" bordered>
               <Descriptions.Item label="房间名">{currentRoom.name}</Descriptions.Item>
+              <Descriptions.Item label="主持人">
+                <Space>
+                  <span>{currentRoom.hostName || '未知'}</span>
+                  <Tag color={realtimeState?.hostOnline ? 'green' : 'default'}>
+                    {realtimeState?.hostOnline ? '在线' : '离线'}
+                  </Tag>
+                </Space>
+              </Descriptions.Item>
               <Descriptions.Item label="人数">
                 {realtimeState && realtimeState.players
                   ? `${realtimeState.players.length}/${currentRoom.maxPlayers}`

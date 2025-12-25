@@ -1,4 +1,5 @@
 import redis from '../utils/redis';
+import prisma from '../utils/db';
 
 export type RoomStatus = 'waiting' | 'playing' | 'closed' | string;
 
@@ -7,6 +8,8 @@ export interface RoomState {
   players: string[];
   status: RoomStatus;
   version: number;
+  hostId?: string;
+  hostOnline?: boolean;
 }
 
 export interface SessionState {
@@ -59,11 +62,30 @@ export const getRoomState = async (roomId: string): Promise<RoomState> => {
 
   const version = versionRaw ? Number.parseInt(versionRaw, 10) || 0 : 0;
 
+  // 获取房间的主持人ID
+  let hostId: string | undefined;
+  let hostOnline = false;
+  try {
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: { hostId: true },
+    });
+    if (room?.hostId) {
+      hostId = room.hostId;
+      // 检查主持人是否在线（是否在 players 列表中）
+      hostOnline = players.includes(room.hostId);
+    }
+  } catch (error) {
+    // 静默处理数据库查询错误
+  }
+
   return {
     roomId,
     players,
     status: (status as RoomStatus | null) ?? 'waiting',
     version,
+    hostId,
+    hostOnline,
   };
 };
 

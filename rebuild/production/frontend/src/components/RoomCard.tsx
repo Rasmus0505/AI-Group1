@@ -26,8 +26,20 @@ export function RoomCard({
   const hostLabel = room.hostName || room.hostId || '未知房主';
   const isFull = room.currentPlayers >= room.maxPlayers;
   const isPlaying = room.status === 'playing';
-  const isJoined = room.isJoined ?? false; // 问题2修复：检查用户是否在房间中
+  const isJoined = room.isJoined ?? false; // 检查用户是否在房间中
   const createdAt = new Date(room.createdAt).toLocaleString();
+
+  // 按钮禁用逻辑：只有不在房间中且房间已满时才禁用
+  // 已在房间的用户始终可以进入（即使显示满人）
+  const isJoinDisabled = !isJoined && (isFull || (isPlaying && !isJoined));
+
+  // 按钮文字逻辑
+  const getButtonText = () => {
+    if (isJoined) return '进入房间'; // 已在房间的用户显示"进入房间"
+    if (isPlaying) return '进行中';
+    if (isFull) return '已满';
+    return '加入';
+  };
 
   return (
     <div className="room-card">
@@ -79,7 +91,7 @@ export function RoomCard({
           <Button
             className="btn-dark"
             size="small"
-            disabled={isFull || (isPlaying && !isJoined)}
+            disabled={isJoinDisabled}
             loading={loading}
             onClick={() => {
               console.log('房间卡片点击:', {
@@ -88,12 +100,12 @@ export function RoomCard({
                 isPlaying,
                 status: room.status,
                 isFull,
-                disabled: isFull || (isPlaying && !isJoined)
+                disabled: isJoinDisabled
               });
               onJoin(room.id);
             }}
           >
-            {isPlaying ? '进行中' : isFull ? '已满' : '加入'}
+            {getButtonText()}
           </Button>
         )}
         

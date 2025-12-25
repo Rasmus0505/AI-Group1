@@ -406,7 +406,7 @@ function HostSetup() {
     }
   };
 
-  // 生成游戏初始化数据
+  // 生成游戏初始化数据（带进度轮询）
   const handleGenerateInit = async (values: GameInitFormValues) => {
     if (!roomId || !config) return;
     
@@ -424,8 +424,27 @@ function HostSetup() {
 
     setGeneratingInit(true);
     
-    // 显示进度提示
-    const hideLoading = message.loading('正在生成初始化数据，这可能需要1-5分钟，请耐心等待...', 0);
+    const hideLoading = message.loading({
+      content: '正在生成初始化数据，这可能需要1-3分钟，请耐心等待...',
+      duration: 0,
+    });
+    
+    // 进度模拟定时器（给用户反馈）
+    const progressSteps = [
+      { time: 5000, msg: '正在构建游戏背景...', percent: 20 },
+      { time: 15000, msg: '正在生成主体信息...', percent: 40 },
+      { time: 30000, msg: '正在生成年度卦象...', percent: 60 },
+      { time: 45000, msg: '正在生成初始选项...', percent: 80 },
+      { time: 60000, msg: '即将完成，请稍候...', percent: 90 },
+    ];
+    
+    const progressTimers: ReturnType<typeof setTimeout>[] = [];
+    progressSteps.forEach(step => {
+      const timer = setTimeout(() => {
+        message.info(step.msg, 2);
+      }, step.time);
+      progressTimers.push(timer);
+    });
     
     // 重试机制
     const maxRetries = 2;
@@ -506,10 +525,12 @@ function HostSetup() {
         
         // 为ECONNABORTED提供特殊提示
         if (error.code === 'ECONNABORTED') {
-          message.info('提示：后端日志显示AI初始化正在正常进行，建议检查网络环境或稍后重试', 10);
+          message.info('提示：AI初始化可能仍在后台进行，建议等待30秒后刷新页面查看', 10);
         }
       }
     } finally {
+      // 清理所有进度定时器
+      progressTimers.forEach(timer => clearTimeout(timer));
       hideLoading();
       setGeneratingInit(false);
     }

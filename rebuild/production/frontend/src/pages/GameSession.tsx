@@ -114,34 +114,47 @@ function GameSessionPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 定期同步会话状态和决策列表
+  // 定期同步会话状态和决策列表（带请求锁防止堆积）
   useEffect(() => {
     if (!sessionId) return;
     
+    let isSyncing = false; // 请求锁
+    let isDecisionSyncing = false; // 决策同步锁
+    
     const syncInterval = setInterval(() => {
-      // 使用异步函数来避免依赖问题
-      (async () => {
-        try {
-          const data = await gameAPI.getSession(sessionId);
-          setSession(data);
-          
-          if (data.hostId && (user?.userId || user?.id) && data.hostId === (user?.userId || user?.id)) {
-            navigate(`/game/${sessionId}/state`, { replace: true });
+      // 会话同步（带锁）
+      if (!isSyncing) {
+        isSyncing = true;
+        (async () => {
+          try {
+            const data = await gameAPI.getSession(sessionId);
+            setSession(data);
+            
+            if (data.hostId && (user?.userId || user?.id) && data.hostId === (user?.userId || user?.id)) {
+              navigate(`/game/${sessionId}/state`, { replace: true });
+            }
+          } catch (err) {
+            console.error('同步会话信息失败:', err);
+          } finally {
+            isSyncing = false;
           }
-        } catch (err) {
-          console.error('同步会话信息失败:', err);
-        }
-      })();
+        })();
+      }
       
-      (async () => {
-        if (!session?.currentRound) return;
-        try {
-          const data = await gameAPI.getRoundDecisions(sessionId, session.currentRound);
-          setDecisions(data.actions);
-        } catch (err) {
-          // 忽略初始空数据
-        }
-      })();
+      // 决策同步（带锁）
+      if (!isDecisionSyncing && session?.currentRound) {
+        isDecisionSyncing = true;
+        (async () => {
+          try {
+            const data = await gameAPI.getRoundDecisions(sessionId, session.currentRound);
+            setDecisions(data.actions);
+          } catch (err) {
+            // 忽略初始空数据
+          } finally {
+            isDecisionSyncing = false;
+          }
+        })();
+      }
     }, 3000); // 每3秒同步一次
     
     return () => clearInterval(syncInterval);
@@ -222,6 +235,13 @@ function GameSessionPage() {
   useEffect(() => {
     if (!sessionId || !session || session.roundStatus !== 'decision') {
       setRecommendedOptions([]);
+      return;
+    }
+
+    // 第一回合必须等待 gameState 加载完成，以确保使用 initialOptions
+    // 避免在 gameState 未加载时调用 API 生成选项导致数据不一致
+    if (session.currentRound === 1 && !gameState) {
+      // gameState 还未加载，暂不加载选项，等待 gameState 加载完成后再触发
       return;
     }
 
@@ -525,16 +545,18 @@ function GameSessionPage() {
 
   // 高级视图：基于真实会话状态，组合新的控制台布局
   if (advancedView) {
+    // 从 gameState 中获取真实的对手数据（如果有）
+    const playersData = (gameState as any)?.players || [];
     const opponentsIntel: OpponentIntelRecord[] = decisions
       .filter(item => item.userId !== user?.userId)
       .map(item => {
         const submitted = item.status === 'submitted';
-        const baseWealthMin = 80_000;
-        const baseWealthMax = submitted ? 160_000 : 220_000;
-        const wealthConfidence = submitted ? 0.75 : 0.35;
-        const powerConfidence = submitted ? 0.7 : 0.45;
-        const influenceConfidence = submitted ? 0.65 : 0.4;
-
+        
+        // 尝试从 gameState.players 中获取真实数据
+        const realPlayerData = playersData.find((p: any) => 
+          p.userId === item.userId || p.playerIndex === item.playerIndex
+        );
+        
         const minutesAgo = Math.max(
           1,
           Math.floor(
@@ -542,34 +564,72 @@ function GameSessionPage() {
           )
         );
 
+        // 如果有真实数据，使用真实数据
+        if (realPlayerData) {
+          const attrs = realPlayerData.attributes || {};
+          const cash = realPlayerData.cash || 0;
+          return {
+            id: item.userId || String(item.playerIndex),
+            name: realPlayerData.name || `玩家 ${item.playerIndex}`,
+            status: submitted ? 'thinking' as const : 'online' as const,
+            resources: {
+              wealth: {
+                value: cash,
+                min: cash * 0.9,
+                max: cash * 1.1,
+                confidence: 0.9, // 真实数据，高置信度
+                lastUpdatedMinutesAgo: minutesAgo,
+                source: 'public_signal' as const, // 来自游戏状态，视为公开信号
+              },
+              power: {
+                value: attrs['市场份额'] || attrs['power'] || 50,
+                min: (attrs['市场份额'] || 50) - 10,
+                max: (attrs['市场份额'] || 50) + 10,
+                confidence: 0.85,
+                lastUpdatedMinutesAgo: minutesAgo,
+                source: 'public_signal' as const,
+              },
+              influence: {
+                value: attrs['品牌声誉'] || attrs['influence'] || 50,
+                min: (attrs['品牌声誉'] || 50) - 10,
+                max: (attrs['品牌声誉'] || 50) + 10,
+                confidence: 0.85,
+                lastUpdatedMinutesAgo: minutesAgo,
+                source: 'public_signal' as const,
+              },
+            },
+          };
+        }
+        
+        // 没有真实数据时，显示低置信度的估算值
         return {
           id: item.userId || String(item.playerIndex),
           name: `玩家 ${item.playerIndex}`,
-          status: submitted ? 'thinking' : 'online',
+          status: submitted ? 'thinking' as const : 'online' as const,
           resources: {
             wealth: {
-              value: baseWealthMax * 0.85,
-              min: baseWealthMin,
-              max: baseWealthMax,
-              confidence: wealthConfidence,
+              value: 0,
+              min: 0,
+              max: 0,
+              confidence: 0, // 无数据，零置信度
               lastUpdatedMinutesAgo: minutesAgo,
-              source: submitted ? 'private_leak' : 'public_signal',
+              source: 'historical_model' as const, // 无数据时使用历史模型标记
             },
             power: {
-              value: 70,
-              min: 40,
-              max: 90,
-              confidence: powerConfidence,
-              lastUpdatedMinutesAgo: minutesAgo + 1,
-              source: 'historical_model',
+              value: 0,
+              min: 0,
+              max: 0,
+              confidence: 0,
+              lastUpdatedMinutesAgo: minutesAgo,
+              source: 'historical_model' as const,
             },
             influence: {
-              value: 55,
-              min: 30,
-              max: 80,
-              confidence: influenceConfidence,
-              lastUpdatedMinutesAgo: minutesAgo + 2,
-              source: 'historical_model',
+              value: 0,
+              min: 0,
+              max: 0,
+              confidence: 0,
+              lastUpdatedMinutesAgo: minutesAgo,
+              source: 'historical_model' as const,
             },
           },
         };

@@ -32,24 +32,25 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) throw new AppError('房间不存在', 404);
 
-  // Default DeepSeek configuration tuned for "Every Wall is a Door"
+  // Default DeepSeek configuration tuned for "Every Wall is a Door" (凡墙皆是门)
+  // 使用中文 system prompt 以获得更好的中文输出质量
   const defaultBodyTemplate = {
     model: 'deepseek-chat',
     messages: [
       {
         role: 'system',
         content:
-          'You are the narrative and rules engine for a multiplayer business simulation game called "Every Wall is a Door" (凡墙皆是门). ' +
-          'The game has multiple entities (A, B, C, D...), each representing a company with a Chinese name. ' +
-          'Time is advanced in quarterly rounds (each round ≈ one quarter, four rounds ≈ one year). In each round: ' +
-          'players submit text decisions for their entities; you update each entity state (cash balance, passive income, passive expense, market share, reputation, innovation, etc.) ' +
-          'STRICTLY following the rules: player decisions FIRST (if an entity gives no decision this round, only apply passive income/expense and ongoing events, NEVER invent proactive actions), ' +
-          'cross-entity effects must be considered (one entity decision can affect others and the market), ' +
-          'you classify events as positive / negative / neutral and allow multi-round events, ' +
-          'you are inspired by an underlying I-Ching hexagram for randomness and narrative flavor but you must keep business logic realistic, ' +
-          'you MUST NOT initiate cooperation between entities on your own and MUST NOT replace players decisions. ' +
-          'At the end of each round you MUST produce: (1) a coherent narrative, (2) a structured per-entity panel with updated attributes and deltas, ' +
-          '(3) a leaderboard with scores (e.g. profit, market share), (4) three short cards for risk, opportunity and current benefit, and (5) a list of achievements for key decisions.'
+          '你是《凡墙皆是门》多人商业博弈游戏的叙事与规则引擎。' +
+          '游戏中有多个决策主体（A、B、C、D...），每个主体代表一家有中文名称的企业。' +
+          '时间以回合推进，每回合约等于一个季度，四个回合约等于一年。每回合中：' +
+          '玩家为其主体提交文字决策；你需要更新每个主体的状态（现金余额、被动收入、被动支出、市场份额、品牌声誉、创新能力等）。' +
+          '严格遵循以下规则：玩家决策优先（如果某主体本回合未提交决策，只结算被动收支和进行中的事件，绝不自行编造主动行动）；' +
+          '必须考虑跨主体影响（一个主体的决策可能影响其他主体和整体市场）；' +
+          '事件分为正面/负面/中性三类，允许多回合持续的长期事件；' +
+          '可参考周易卦象增加叙事风味和随机性，但商业逻辑必须保持合理；' +
+          '绝不自行发起主体间的合作，绝不替代玩家的决策。' +
+          '每回合结束时必须输出：(1) 连贯的叙事文本，(2) 每个主体的状态面板（含属性变化），' +
+          '(3) 排行榜（如利润、市场份额），(4) 风险、机会、当前效益三张简评卡，(5) 关键决策的成就列表。'
       },
       {
         role: 'user',
@@ -57,7 +58,7 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
       }
     ],
     temperature: 0.7,
-    max_tokens: 2000,
+    max_tokens: 8000,
     stream: false
   };
 
@@ -421,6 +422,15 @@ router.post('/:roomId/close', authenticateToken, async (req: AuthRequest, res, n
       }),
     ]);
 
+    // 清理Redis中的游戏初始化数据（关闭房间后清理）
+    try {
+      const initKey = `game:init:${roomId}`;
+      await redis.del(initKey);
+      logger.info(`Cleaned up game init data for room ${roomId} after room close`);
+    } catch (redisErr) {
+      logger.warn('Failed to clean up game init data on close:', redisErr);
+    }
+
     try {
       io.to(roomId).emit('system_message', {
         roomId,
@@ -499,6 +509,15 @@ router.post('/:roomId/kill-game', authenticateToken, async (req: AuthRequest, re
       } catch (redisErr) {
         logger.warn('Failed to clean up Redis keys:', redisErr);
       }
+    }
+
+    // 清理Redis中的游戏初始化数据（终止游戏后需要重新生成）
+    try {
+      const initKey = `game:init:${roomId}`;
+      await redis.del(initKey);
+      logger.info(`Cleaned up game init data for room ${roomId} after game termination`);
+    } catch (redisErr) {
+      logger.warn('Failed to clean up game init data:', redisErr);
     }
 
     // 广播游戏终止通知
@@ -606,6 +625,15 @@ router.post('/:roomId/reset-game', authenticateToken, async (req: AuthRequest, r
       logger.warn('Failed to clean up Redis keys on reset', redisErr);
     }
 
+    // 清理Redis中的游戏初始化数据（重置房间后需要重新生成）
+    try {
+      const initKey = `game:init:${roomId}`;
+      await redis.del(initKey);
+      logger.info(`Cleaned up game init data for room ${roomId} after room reset`);
+    } catch (redisErr) {
+      logger.warn('Failed to clean up game init data on reset:', redisErr);
+    }
+
     // 广播重置通知
     try {
       io.to(roomId).emit('system_message', {
@@ -708,10 +736,11 @@ router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, 
       },
     });
 
-    // 同步更新房间的 maxPlayers
+    // 同步更新房间的 maxPlayers（只计算人类玩家数，不包括主持人）
+    // 主持人不是决策主体，所以房间容量 = 人类玩家数
     await prisma.room.update({
       where: { id: roomId },
-      data: { maxPlayers: total },
+      data: { maxPlayers: human },
     });
 
     res.json({ code: 200, message: '主持人配置已保存', data: toHostConfigResponse(updated) });

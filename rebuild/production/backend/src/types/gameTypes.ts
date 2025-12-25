@@ -126,7 +126,10 @@ export interface TurnResultDTO {
   benefitCard: string | AssessmentCard;
   achievements: TurnAchievement[];
   hexagram?: TurnHexagram;
+  /** 旧格式：全局选项 */
   options?: TurnOption[];
+  /** 新格式：各主体专属决策选项，按主体ID分组 */
+  perEntityOptions?: Record<string, TurnOption[]>;
   ledger?: TurnLedger;
   branchingNarratives?: string[];
   nextRoundHints?: string;
@@ -247,7 +250,20 @@ export const TURN_RESULT_JSON_SCHEMA = `
       "description": "string (选项描述)",
       "expectedDelta": { "资源名": "number" } (预期变动)
     }
-  ],
+  ] (旧格式，全局选项),
+  "perEntityOptions": {
+    "A": [
+      {
+        "id": "string (A1, A2, A3)",
+        "title": "string (针对主体A的选项标题)",
+        "description": "string (基于主体A当前状态的策略建议)",
+        "expectedDelta": { "资源名": "number" },
+        "category": "attack|defense|cooperation|explore|trade",
+        "riskLevel": "low|medium|high"
+      }
+    ],
+    "B": [...] (主体B的专属选项)
+  } (新格式，各主体专属选项),
   "riskCard": "string (企业风险简评)",
   "opportunityCard": "string (企业机会简评)",
   "benefitCard": "string (当前效益简评)",

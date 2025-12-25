@@ -178,14 +178,34 @@ function CinematicPlayer(props: CinematicPlayerProps) {
   const [displayedText, setDisplayedText] = useState('');
   const triggeredKeywordsRef = useRef<Set<string>>(new Set());
   const intervalRef = useRef<number | null>(null);
+  // 使用 ref 存储 onEventTriggered 回调，避免因回调引用变化导致重新播放
+  const onEventTriggeredRef = useRef(onEventTriggered);
+  // 记录上一次的 narrative，只有内容真正变化时才重置播放
+  const prevNarrativeRef = useRef<string>('');
+
+  // 更新回调 ref（不触发重新渲染）
+  useEffect(() => {
+    onEventTriggeredRef.current = onEventTriggered;
+  }, [onEventTriggered]);
 
   useEffect(() => {
+    // 只有当 narrative 内容真正变化时才重新开始播放
+    if (narrative === prevNarrativeRef.current) {
+      return;
+    }
+    prevNarrativeRef.current = narrative;
+
     // 每次 narrative 变化时，从头开始播放
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     setDisplayedText('');
     triggeredKeywordsRef.current = new Set();
+
+    // 如果 narrative 为空，不启动定时器
+    if (!narrative) {
+      return;
+    }
 
     let index = 0;
     intervalRef.current = window.setInterval(() => {
@@ -206,8 +226,8 @@ function CinematicPlayer(props: CinematicPlayerProps) {
         }
         if (nextText.includes(eventItem.keyword)) {
           triggeredKeywordsRef.current.add(eventItem.keyword);
-          if (onEventTriggered) {
-            onEventTriggered(eventItem);
+          if (onEventTriggeredRef.current) {
+            onEventTriggeredRef.current(eventItem);
           }
         }
       });
@@ -220,7 +240,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [narrative, events, onEventTriggered]);
+  }, [narrative, events]); // 移除 onEventTriggered 依赖，使用 ref 代替
 
   return (
     <p className="typewriter-cursor leading-relaxed text-xl font-serif">
@@ -297,24 +317,29 @@ function InferenceResultPage() {
     }
     
     // AI 完成后，使用真实数据
-    if (result.status === 'completed' && result.result?.uiTurnResult) {
-      const ui = result.result.uiTurnResult;
+    if (result.status === 'completed' && result.result) {
+      // 优先使用 uiTurnResult，如果不存在则从 result.result 直接获取
+      const ui = result.result.uiTurnResult || result.result;
+      // 核心剧情：优先使用 uiTurnResult.narrative，其次使用 result.result.narrative
+      const narrative = result.result.uiTurnResult?.narrative || result.result.narrative || '';
+      
       return {
-        narrative: ui.narrative || '',
-        events: ui.events || [],
-        redactedSegments: ui.redactedSegments || [],
-        perEntityPanel: ui.perEntityPanel || [],
-        leaderboard: ui.leaderboard || [],
-        riskCard: ui.riskCard || '',
-        opportunityCard: ui.opportunityCard || '',
-        benefitCard: ui.benefitCard || '',
-        achievements: ui.achievements || [],
-        hexagram: ui.hexagram,
-        options: ui.options || [],
-        ledger: ui.ledger,
-        branchingNarratives: ui.branchingNarratives || [],
-        roundTitle: ui.roundTitle,
-        cashFlowWarning: ui.cashFlowWarning,
+        narrative: narrative,
+        events: (ui as any).events || [],
+        redactedSegments: (ui as any).redactedSegments || [],
+        perEntityPanel: (ui as any).perEntityPanel || [],
+        leaderboard: (ui as any).leaderboard || [],
+        riskCard: (ui as any).riskCard || '',
+        opportunityCard: (ui as any).opportunityCard || '',
+        benefitCard: (ui as any).benefitCard || '',
+        achievements: (ui as any).achievements || [],
+        hexagram: (ui as any).hexagram,
+        options: (ui as any).options || [],
+        perEntityOptions: (ui as any).perEntityOptions || {},
+        ledger: (ui as any).ledger,
+        branchingNarratives: (ui as any).branchingNarratives || [],
+        roundTitle: (ui as any).roundTitle,
+        cashFlowWarning: (ui as any).cashFlowWarning,
       };
     }
     
@@ -331,6 +356,7 @@ function InferenceResultPage() {
       achievements: [],
       hexagram: undefined,
       options: [],
+      perEntityOptions: {},
       ledger: undefined,
       branchingNarratives: [],
       roundTitle: undefined,
@@ -405,7 +431,66 @@ function InferenceResultPage() {
     );
   };
 
-  const renderOptions = (options?: TurnOption[]) => {
+  const renderOptions = (options?: TurnOption[], perEntityOptions?: Record<string, TurnOption[]>) => {
+    // 优先使用新格式 perEntityOptions（按主体分组）
+    if (perEntityOptions && Object.keys(perEntityOptions).length > 0) {
+      return (
+        <GlassCard title="战略选项" extra={<Flag size={18} />}>
+          <div className="space-y-4">
+            {Object.entries(perEntityOptions).map(([entityId, entityOptions]) => (
+              <div key={entityId} className="space-y-2">
+                <div className="text-sm font-semibold text-slate-300 border-b border-slate-700/50 pb-1">
+                  主体 {entityId} 的策略选项
+                </div>
+                <div className="space-y-3">
+                  {entityOptions.map(opt => (
+                    <div
+                      key={opt.id}
+                      className="p-3 rounded bg-slate-900/40 border border-slate-800/60"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-100 font-semibold">{opt.title}</span>
+                        <span className="text-[10px] uppercase text-slate-500">#{opt.id}</span>
+                      </div>
+                      <p className="text-sm text-slate-300 mb-2">{opt.description}</p>
+                      {opt.expectedDelta && (
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-200">
+                          {Object.entries(opt.expectedDelta).map(([key, val]) => {
+                            const isCashField = key.toLowerCase().includes('cash') || key.toLowerCase().includes('金');
+                            const isLargeNumber = Math.abs(val) > 100;
+                            
+                            let displayValue: string;
+                            if (isCashField || isLargeNumber) {
+                              displayValue = val >= 0 
+                                ? `+${val.toLocaleString()}` 
+                                : val.toLocaleString();
+                            } else if (Math.abs(val) <= 1) {
+                              displayValue = val >= 0 
+                                ? `+${(val * 100).toFixed(0)}%` 
+                                : `${(val * 100).toFixed(0)}%`;
+                            } else {
+                              displayValue = val >= 0 ? `+${val}` : `${val}`;
+                            }
+                            
+                            return (
+                              <Tag key={key} color={val >= 0 ? 'green' : 'red'}>
+                                {key}: {displayValue}
+                              </Tag>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      );
+    }
+    
+    // 兼容旧格式 options（全局选项）
     if (!options || options.length === 0) return null;
     return (
       <GlassCard title="战略选项" extra={<Flag size={18} />}>
@@ -564,8 +649,30 @@ function InferenceResultPage() {
   const loadResult = async () => {
     if (!sessionId || !round) return;
     try {
+      // 首先尝试从 inference-result 接口获取
       const data = await gameAPI.getInferenceResult(sessionId, Number(round));
       setResult(data);
+      
+      // 如果 narrative 为空，尝试从 getGameState 获取（与 GameSession 保持一致）
+      if (data.status === 'completed' && !data.result?.uiTurnResult?.narrative && !data.result?.narrative) {
+        try {
+          const state = await gameAPI.getGameState(sessionId);
+          const rawResult = state.inferenceResult?.result as any;
+          if (rawResult?.uiTurnResult?.narrative || rawResult?.narrative) {
+            // 合并数据
+            setResult({
+              ...data,
+              result: {
+                ...data.result,
+                narrative: rawResult?.narrative || data.result?.narrative,
+                uiTurnResult: rawResult?.uiTurnResult || data.result?.uiTurnResult,
+              },
+            });
+          }
+        } catch {
+          // 忽略备选数据源失败
+        }
+      }
       
       // 获取会话信息以获取 roomId（用于加入 WebSocket 房间）
       if (!roomId) {
@@ -579,6 +686,29 @@ function InferenceResultPage() {
         }
       }
     } catch (err: any) {
+      // 如果 inference-result 接口失败，尝试从 getGameState 获取
+      try {
+        const state = await gameAPI.getGameState(sessionId);
+        const rawResult = state.inferenceResult?.result as any;
+        if (rawResult) {
+          setResult({
+            sessionId,
+            round: Number(round),
+            status: state.inferenceResult?.status === 'completed' ? 'completed' : 'processing',
+            result: {
+              narrative: rawResult?.narrative,
+              uiTurnResult: rawResult?.uiTurnResult,
+              outcomes: rawResult?.outcomes,
+              events: rawResult?.events,
+              nextRoundHints: rawResult?.nextRoundHints,
+            },
+            completedAt: state.inferenceResult?.completedAt,
+          });
+          return;
+        }
+      } catch {
+        // 忽略备选数据源失败
+      }
       message.error('同步结果失败');
     }
   };
@@ -703,12 +833,12 @@ function InferenceResultPage() {
           <Col span={16}>
             <GlassCard title="核心叙事" extra={<ScrollText size={18} />}>
               <div className="min-h-[400px] p-8 bg-slate-950/40 rounded-xl leading-relaxed text-xl font-serif">
-                {result?.status === 'processing' ? (
+                {!result || result.status === 'processing' ? (
                   <div className="flex flex-col items-center justify-center h-full py-20 opacity-40">
                     <Sparkles size={48} className="mb-4" />
                     <p>正在重构因果链路，构筑时空分叉...</p>
                   </div>
-                ) : result?.status === 'failed' ? (
+                ) : result.status === 'failed' ? (
                   <div className="flex flex-col items-center justify-center h-full py-20">
                     <AlertTriangle size={48} className="mb-4 text-rose-500" />
                     <p className="text-rose-400 font-bold mb-2">推演失败</p>
@@ -721,18 +851,24 @@ function InferenceResultPage() {
                       </p>
                     )}
                   </div>
-                ) : (
+                ) : turnResult.narrative ? (
                   <CinematicPlayer
                     narrative={turnResult.narrative}
                     events={turnResult.events}
                     onEventTriggered={handleEventTriggered}
                   />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full py-20 opacity-40">
+                    <ScrollText size={48} className="mb-4" />
+                    <p>暂无叙事内容</p>
+                    <p className="text-sm text-slate-500 mt-2">AI推演结果中未包含核心剧情</p>
+                  </div>
                 )}
               </div>
             </GlassCard>
 
             {renderBranching(turnResult.branchingNarratives)}
-            {renderOptions(turnResult.options)}
+            {renderOptions(turnResult.options, turnResult.perEntityOptions)}
             {renderEntityPanel(turnResult.perEntityPanel)}
 
             {result?.result?.nextRoundHints && (

@@ -34,6 +34,7 @@ const emptyTurnResult: TurnResultDTO = {
   achievements: [],
   hexagram: undefined,
   options: [],
+  perEntityOptions: {},
   ledger: undefined,
   branchingNarratives: [],
   redactedSegments: [],
@@ -158,7 +159,9 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult:
   // 不再使用 mock 数据作为回退，当数据为空时显示空状态
   const hexagram = useMemo(() => turnResult?.hexagram || null, [turnResult]);
   const ledger = useMemo(() => turnResult?.ledger || null, [turnResult]);
+  // 兼容新旧格式：优先使用 perEntityOptions，回退到 options
   const options = useMemo(() => turnResult?.options || [], [turnResult]);
+  const perEntityOptions = useMemo(() => turnResult?.perEntityOptions || {}, [turnResult]);
   const entities = useMemo(() => entitiesFromState || turnResult?.perEntityPanel || [], [entitiesFromState, turnResult]);
   const cashCoverage =
     ledger && ledger.passiveExpense > 0 ? ledger.balance / ledger.passiveExpense : Infinity;
@@ -488,7 +491,25 @@ const DecisionConsole: React.FC<{ turnResult?: TurnResultDTO }> = ({ turnResult:
             <Text className="text-amber-200">智能决策选项</Text>
           </div>
           <div className="space-y-3">
-            {options.length > 0 ? (
+            {/* 优先显示按主体分组的选项 */}
+            {Object.keys(perEntityOptions).length > 0 ? (
+              Object.entries(perEntityOptions).map(([entityId, entityOptions]) => (
+                <div key={entityId} className="space-y-2">
+                  <div className="text-xs font-semibold text-amber-300/80 border-b border-slate-700/50 pb-1">
+                    主体 {entityId} 的策略选项
+                  </div>
+                  {entityOptions.map(opt => (
+                    <div key={opt.id} className="p-3 rounded border border-slate-700 bg-slate-800/60">
+                      <div className="flex items-center justify-between">
+                        <Text className="text-slate-100 font-semibold">{opt.title}</Text>
+                        <Tag color="cyan">{formatDelta(opt.expectedDelta)}</Tag>
+                      </div>
+                      <Paragraph className="text-slate-300 mb-1">{opt.description}</Paragraph>
+                    </div>
+                  ))}
+                </div>
+              ))
+            ) : options.length > 0 ? (
               options.map(opt => (
                 <div key={opt.id} className="p-3 rounded border border-slate-700 bg-slate-800/60">
                   <div className="flex items-center justify-between">

@@ -156,17 +156,47 @@ class WebSocketService {
 
   private rejoinRooms(): void {
     if (!this.socket || this.activeRooms.size === 0) return;
-    this.socket.emit('rejoin_rooms', { roomIds: Array.from(this.activeRooms) }, () => {
-      // no-op ack
+    
+    const roomIds = Array.from(this.activeRooms);
+    console.log('WebSocket: Rejoining rooms after reconnect', roomIds);
+    
+    this.socket.emit('rejoin_rooms', { roomIds }, (response: any) => {
+      if (response?.joined) {
+        console.log('WebSocket: Successfully rejoined rooms', response.joined.map((r: any) => r.roomId));
+      }
     });
+    
+    // 添加重试机制：如果 3 秒后仍未收到确认，重试一次
+    setTimeout(() => {
+      if (this.socket?.connected && this.activeRooms.size > 0) {
+        // 检查是否需要重试（简单实现：再发一次）
+        this.socket.emit('rejoin_rooms', { roomIds: Array.from(this.activeRooms) }, () => {
+          // 静默重试
+        });
+      }
+    }, 3000);
   }
 
   // 同步会话
   private syncSession(): void {
     if (!this.socket || !this.activeSessionId) return;
-    this.socket.emit('session_sync', { sessionId: this.activeSessionId }, () => {
-      // no-op ack
+    
+    console.log('WebSocket: Syncing session after reconnect', this.activeSessionId);
+    
+    this.socket.emit('session_sync', { sessionId: this.activeSessionId }, (state: any) => {
+      if (state) {
+        console.log('WebSocket: Session synced successfully');
+      }
     });
+    
+    // 添加重试机制
+    setTimeout(() => {
+      if (this.socket?.connected && this.activeSessionId) {
+        this.socket.emit('session_sync', { sessionId: this.activeSessionId }, () => {
+          // 静默重试
+        });
+      }
+    }, 3000);
   }
 
   // 请求增量更新

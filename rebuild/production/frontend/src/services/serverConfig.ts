@@ -95,6 +95,7 @@ class ServerConfigService {
 
   /**
    * 扫描局域网常见地址
+   * 使用并发限制避免性能问题
    */
   async scanLanServers(): Promise<Array<{ host: string; port: number; latency: number }>> {
     const results: Array<{ host: string; port: number; latency: number }> = [];
@@ -102,20 +103,30 @@ class ServerConfigService {
     // 获取可能的局域网地址
     const addresses = this.generateLanAddresses();
     
-    // 并行测试所有地址
-    const tests = addresses.map(async (addr) => {
-      const start = Date.now();
-      const isOnline = await this.testConnection(addr, 3000);
-      if (isOnline) {
-        results.push({
-          host: addr,
-          port: 3000,
-          latency: Date.now() - start,
-        });
+    // 并发限制：每批最多10个并发请求
+    const BATCH_SIZE = 10;
+    
+    for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+      const batch = addresses.slice(i, i + BATCH_SIZE);
+      const batchTests = batch.map(async (addr) => {
+        const start = Date.now();
+        const isOnline = await this.testConnection(addr, 3000);
+        if (isOnline) {
+          results.push({
+            host: addr,
+            port: 3000,
+            latency: Date.now() - start,
+          });
+        }
+      });
+      
+      await Promise.all(batchTests);
+      
+      // 如果已经找到足够多的服务器，提前结束扫描
+      if (results.length >= 5) {
+        break;
       }
-    });
-
-    await Promise.all(tests);
+    }
     
     // 按延迟排序
     return results.sort((a, b) => a.latency - b.latency);

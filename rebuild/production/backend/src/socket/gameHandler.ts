@@ -1,7 +1,7 @@
 import { Server } from 'socket.io';
 import { AuthedSocket } from './authSocket';
 import { logger } from '../utils/logger';
-import { saveSessionState, getSessionState } from '../services/roomStateService';
+import { saveSessionState, getSessionState, getSessionDeltas } from '../services/roomStateService';
 
 interface RoundStageChangedPayload {
   sessionId: string;
