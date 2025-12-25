@@ -1,0 +1,54 @@
+{
+  "$schema": "../scenario.schema.json",
+  "id": "default",
+  "name": "商业博弈",
+  "version": "1.0.0",
+  "description": "默认商业博弈场景",
+  
+  "industry": "综合商业",
+  "initialCash": 100000,
+  
+  "initialAttributes": {
+    "市场份额": 20,
+    "品牌声誉": 50,
+    "创新能力": 50
+  },
+  
+  "passiveIncomeItems": [
+    {
+      "name": "稳健业务收入",
+      "amount": 8000,
+      "description": "每回合固定收入"
+    }
+  ],
+  
+  "passiveExpenseItems": [
+    {
+      "name": "固定运营成本",
+      "amount": 5000,
+      "description": "每回合固定支出"
+    },
+    {
+      "name": "人员薪资",
+      "amount": 2000,
+      "description": "每回合固定支出"
+    }
+  ],
+  
+  "backgroundStory": "",
+  "victoryCondition": "游戏结束时综合得分最高者获胜",
+  
+  "specialRules": [],
+  
+  "attributeRanges": {
+    "市场份额": { "min": 0, "max": 100 },
+    "品牌声誉": { "min": 0, "max": 100 },
+    "创新能力": { "min": 0, "max": 100 }
+  },
+  
+  "eventProbabilities": {
+    "positive": 0.3,
+    "neutral": 0.4,
+    "negative": 0.3
+  }
+}

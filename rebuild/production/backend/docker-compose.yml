@@ -1,0 +1,34 @@
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: game-postgres
+    environment:
+      POSTGRES_USER: game_user
+      POSTGRES_PASSWORD: game_password
+      POSTGRES_DB: game_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # 使用本地目录存储数据，方便项目迁移
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U game_user -d game_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: game-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      # 使用本地目录存储数据，方便项目迁移
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+

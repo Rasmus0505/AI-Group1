@@ -1,0 +1,9 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+鉁?Generated Prisma Client (v5.22.0) to .\node_modules\@prisma\client in 343ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+

@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String           @id @default(uuid())
+  username        String           @unique
+  password        String
+  nickname        String?
+  avatarUrl       String?
+  level           Int              @default(1)
+  experience      Int              @default(0)
+  status          String           @default("active")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  lastLoginAt     DateTime?
+  createdRooms    Room[]           @relation("Room_Creator")
+  hostedRooms     Room[]           @relation("Room_Host")
+  gameSaves       GameSave[]       @relation("GameSave_User")
+  createdTasks    Task[]           @relation("Task_Creator")
+  hostConfigs     HostConfig[]     @relation("HostConfig_User")
+  playerActions   PlayerAction[]   @relation("PlayerAction_User")
+  roomPlayers     RoomPlayer[]     @relation("RoomPlayer_User")
+  taskProgresses  TaskProgress[]   @relation("TaskProgress_User")
+  temporaryEvents TemporaryEvent[] @relation("TemporaryEvent_User")
+  initiatedTrades Trade[]          @relation("TradeInitiator")
+  receivedTrades  Trade[]          @relation("TradeTarget")
+  strategies      Strategy[]       @relation("Strategy_User")
+
+  @@map("users")
+}
+
+model Room {
+  id             String       @id @default(uuid())
+  name           String
+  creatorId      String
+  hostId         String
+  maxPlayers     Int
+  currentPlayers Int          @default(0)
+  status         String       @default("waiting")
+  password       String?
+  createdAt      DateTime     @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  creator        User         @relation("Room_Creator", fields: [creatorId], references: [id])
+  host           User         @relation("Room_Host", fields: [hostId], references: [id])
+  gameSession    GameSession?
+  hostConfig     HostConfig?
+  players        RoomPlayer[]
+
+  @@map("game_rooms")
+}
+
+model RoomPlayer {
+  id          String    @id @default(uuid())
+  roomId      String
+  userId      String
+  role        String
+  playerIndex Int?
+  isHuman     Boolean   @default(true)
+  status      String    @default("joined")
+  joinedAt    DateTime  @default(now())
+  leftAt      DateTime?
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user        User      @relation("RoomPlayer_User", fields: [userId], references: [id])
+
+  @@map("room_players")
+}
+
+model HostConfig {
+  id                       String    @id @default(uuid())
+  roomId                   String    @unique
+  createdBy                String
+  apiConfig                Json
+  apiProvider              String?
+  apiEndpoint              String?
+  apiHeaders               Json?
+  apiBodyTemplate          Json?
+  validationStatus         String    @default("pending")
+  validationMessage        String?
+  validatedAt              DateTime?
+  configurationCompletedAt DateTime?
+  gameRules                String?
+  totalDecisionEntities    Int
+  humanPlayerCount         Int
+  aiPlayerCount            Int
+  decisionTimeLimit        Int       @default(4)
+  timeoutStrategy          String    @default("auto_submit")
+  initializationCompleted  Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  creator                  User      @relation("HostConfig_User", fields: [createdBy], references: [id])
+  room                     Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("host_configurations")
+}
+
+model GameSession {
+  id               String           @id @default(uuid())
+  roomId           String           @unique
+  currentRound     Int              @default(1)
+  totalRounds      Int?
+  roundStatus      String           @default("decision")
+  decisionDeadline DateTime?
+  gameState        Json?
+  status           String           @default("playing")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  saves            GameSave[]
+  room             Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tasks            Task[]
+  actions          PlayerAction[]
+  events           TemporaryEvent[]
+  trades           Trade[]
+
+  @@map("game_sessions")
+}
+
+model PlayerAction {
+  id                    String      @id @default(uuid())
+  sessionId             String
+  userId                String
+  playerIndex           Int
+  round                 Int
+  selectedOptionIds     Json?
+  actionText            String
+  actionType            String?
+  actionData            Json?
+  combinationSuggestion String?
+  hostModified          Boolean     @default(false)
+  hostModification      Json?
+  status                String      @default("pending")
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  aiResponse            Json?
+  result                Json?
+  submittedAt           DateTime    @default(now())
+  session               GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                  User        @relation("PlayerAction_User", fields: [userId], references: [id])
+
+  @@map("player_actions")
+}
+
+model TemporaryEvent {
+  id              String      @id @default(uuid())
+  sessionId       String
+  round           Int
+  eventType       String
+  eventContent    String
+  effectiveRounds Int
+  progress        Json
+  createdBy       String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+  creator         User        @relation("TemporaryEvent_User", fields: [createdBy], references: [id])
+  session         GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("temporary_events")
+}
+
+model Trade {
+  id          String      @id @default(uuid())
+  sessionId   String
+  round       Int
+  initiatorId String
+  targetId    String
+  resources   Json
+  status      String      @default("pending")
+  expiresAt   DateTime
+  respondedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  initiator   User        @relation("TradeInitiator", fields: [initiatorId], references: [id])
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  target      User        @relation("TradeTarget", fields: [targetId], references: [id])
+
+  @@index([sessionId, round])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("trades")
+}
+
+model GameSave {
+  id          String      @id @default(uuid())
+  sessionId   String
+  saveName    String?
+  description String?
+  isAutoSave  Boolean     @default(false)
+  saveData    Json
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  creator     User        @relation("GameSave_User", fields: [createdBy], references: [id])
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("game_saves")
+}
+
+model Task {
+  id           String         @id @default(uuid())
+  sessionId    String
+  title        String
+  description  String?
+  taskType     String
+  difficulty   String         @default("normal")
+  requirements Json
+  rewards      Json?
+  status       String         @default("active")
+  progress     Json           @default("{}")
+  createdBy    String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  expiresAt    DateTime?
+  completedAt  DateTime?
+  creator      User?          @relation("Task_Creator", fields: [createdBy], references: [id])
+  session      GameSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  progresses   TaskProgress[]
+
+  @@index([sessionId])
+  @@index([status])
+  @@index([taskType])
+  @@index([expiresAt])
+  @@map("game_tasks")
+}
+
+model TaskProgress {
+  id          String    @id @default(uuid())
+  taskId      String
+  userId      String
+  progress    Json      @default("{}")
+  status      String    @default("in_progress")
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User      @relation("TaskProgress_User", fields: [userId], references: [id])
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+  @@index([status])
+  @@map("task_progress")
+}
+
+model Strategy {
+  id            String   @id @default(uuid())
+  userId        String
+  sessionId     String?
+  strategyName  String
+  description   String?
+  strategyData  Json
+  effectiveness Json?
+  winRate       Float?
+  averageScore  Float?
+  totalGames    Int      @default(0)
+  totalWins     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation("Strategy_User", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([winRate])
+  @@map("user_strategies")
+}
+
+model AIConversationHistory {
+  id         String   @id @default(uuid())
+  sessionId  String
+  round      Int
+  role       String
+  content    String
+  tokenCount Int?
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([sessionId, round])
+  @@map("ai_conversation_history")
+}

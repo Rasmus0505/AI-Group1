@@ -1,0 +1,45 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+Error: Prisma schema validation - (validate wasm)
+Error code: P1012
+error: Error validating field `initiatedTrades` in model `User`: The relation field `initiatedTrades` on model `User` is missing an opposite relation field on the model `Trade`. Either run `prisma format` or add it manually.
+  -->  prisma\schema.prisma:34
+   | 
+33 |   temporaryEvents TemporaryEvent[] @relation("TemporaryEvent_User")
+34 |   initiatedTrades Trade[] @relation("Trade_Initiator")
+35 |   receivedTrades Trade[] @relation("Trade_Target")
+   | 
+error: Error validating field `receivedTrades` in model `User`: The relation field `receivedTrades` on model `User` is missing an opposite relation field on the model `Trade`. Either run `prisma format` or add it manually.
+  -->  prisma\schema.prisma:35
+   | 
+34 |   initiatedTrades Trade[] @relation("Trade_Initiator")
+35 |   receivedTrades Trade[] @relation("Trade_Target")
+36 |   gameSaves       GameSave[]     @relation("GameSave_User")
+   | 
+error: Error validating field `initiator` in model `Trade`: The relation field `initiator` on model `Trade` is missing an opposite relation field on the model `User`. Either run `prisma format` or add it manually.
+  -->  prisma\schema.prisma:200
+   | 
+199 |   session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+200 |   initiator User        @relation("TradeInitiator", fields: [initiatorId], references: [id])
+201 |   target    User        @relation("TradeTarget", fields: [targetId], references: [id])
+   | 
+error: Error validating field `target` in model `Trade`: The relation field `target` on model `Trade` is missing an opposite relation field on the model `User`. Either run `prisma format` or add it manually.
+  -->  prisma\schema.prisma:201
+   | 
+200 |   initiator User        @relation("TradeInitiator", fields: [initiatorId], references: [id])
+201 |   target    User        @relation("TradeTarget", fields: [targetId], references: [id])
+202 | 
+   | 
+error: Error validating field `task` in model `TaskProgress`: The relation field `task` on model `TaskProgress` is missing an opposite relation field on the model `Task`. Either run `prisma format` or add it manually.
+  -->  prisma\schema.prisma:267
+   | 
+266 |   // Relations
+267 |   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+268 |   user User @relation("TaskProgress_User", fields: [userId], references: [id])
+   | 
+
+Validation Error Count: 5
+[Context: validate]
+
+Prisma CLI Version : 5.22.0
