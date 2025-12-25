@@ -4,6 +4,7 @@ import prisma from '../utils/db';
 import { AppError } from '../middleware/errorHandler';
 import { io } from '../server';
 import { aiService, InferenceRequest, AIConfig } from '../services/aiService';
+import { gameRecoveryService } from '../services/GameRecoveryService';
 import redis from '../utils/redis';
 import { logger } from '../utils/logger';
 
@@ -72,21 +73,60 @@ router.post('/:roomId/generate-init', authenticateToken, async (req: AuthRequest
       entityCount,
       gameMode,
       initialCash,
+      apiEndpoint: aiConfig.endpoint,
+      hasApiKey: !!(aiConfig.headers && (aiConfig.headers as any).Authorization)
     });
 
-    const initResult = await aiService.initializeGame(aiConfig, {
-      entityCount,
-      gameMode: gameMode || 'multi_control',
-      initialCash: initialCash || 1000000,
-      gameRules: hostConfig.gameRules || undefined,
-      industryTheme,
-    });
+    try {
+      const initResult = await aiService.initializeGame(aiConfig, {
+        entityCount,
+        gameMode: gameMode || 'multi_control',
+        initialCash: initialCash || 1000000,
+        gameRules: hostConfig.gameRules || undefined,
+        industryTheme,
+      });
 
-    res.json({
-      code: 200,
-      message: '游戏初始化数据生成成功',
-      data: initResult,
-    });
+      logger.info(`Game init generated successfully for room ${roomId}`, {
+        hasBackgroundStory: !!initResult.backgroundStory,
+        entitiesCount: initResult.entities?.length || 0,
+        hasHexagram: !!initResult.yearlyHexagram
+      });
+
+      res.json({
+        code: 200,
+        message: '游戏初始化数据生成成功',
+        data: initResult,
+      });
+    } catch (aiError: any) {
+      logger.error(`AI service error for room ${roomId}`, {
+        error: aiError.message,
+        stack: aiError.stack,
+        aiConfig: {
+          provider: aiConfig.provider,
+          endpoint: aiConfig.endpoint,
+          hasHeaders: !!aiConfig.headers,
+          hasBodyTemplate: !!aiConfig.bodyTemplate
+        }
+      });
+
+      // 根据AI错误类型提供更具体的错误信息
+      let errorMessage = '生成初始化数据失败';
+      if (aiError.message?.includes('timeout') || aiError.code === 'ETIMEDOUT') {
+        errorMessage = 'AI API调用超时，请检查网络连接或稍后重试';
+      } else if (aiError.message?.includes('401') || aiError.message?.includes('Unauthorized')) {
+        errorMessage = 'API密钥无效，请检查AI API配置';
+      } else if (aiError.message?.includes('404')) {
+        errorMessage = 'API端点不存在，请检查端点地址配置';
+      } else if (aiError.message?.includes('429')) {
+        errorMessage = 'API调用频率超限，请稍后重试';
+      } else if (aiError.message?.includes('500')) {
+        errorMessage = 'AI服务器内部错误，请稍后重试';
+      } else if (aiError.message) {
+        errorMessage = aiError.message;
+      }
+
+      throw new AppError(errorMessage, 500);
+    }
   } catch (error) {
     next(error);
   }
@@ -175,6 +215,48 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
       throw new AppError('主持人配置未完成，无法开始游戏', 400);
     }
 
+    // 从 Redis 获取游戏初始化数据
+    const initKey = `game:init:${roomId}`;
+    const initDataStr = await redis.get(initKey);
+    let gameInitData: any = null;
+    if (initDataStr) {
+      try {
+        gameInitData = JSON.parse(initDataStr);
+        logger.info(`Loaded game init data for room ${roomId} at game start`, {
+          hasBackgroundStory: !!gameInitData?.backgroundStory,
+          entitiesCount: gameInitData?.entities?.length || 0,
+          hasHexagram: !!gameInitData?.yearlyHexagram,
+        });
+      } catch (e) {
+        logger.warn(`Failed to parse game init data for room ${roomId}`, { error: e });
+      }
+    }
+
+    // 检查初始化数据是否存在且完整
+    if (!gameInitData || !gameInitData.backgroundStory || !gameInitData.entities || gameInitData.entities.length === 0) {
+      throw new AppError('游戏初始化数据不存在或已过期，请主持人重新生成并保存初始化数据', 400);
+    }
+
+    // 构建初始 gameState（包含初始化数据）
+    const initialGameState = gameInitData ? {
+      backgroundStory: gameInitData.backgroundStory,
+      entities: gameInitData.entities,
+      yearlyHexagram: gameInitData.yearlyHexagram,
+      initialOptions: gameInitData.initialOptions,
+      cashFormula: gameInitData.cashFormula,
+      currentHexagram: gameInitData.yearlyHexagram, // 当前卦象初始为年度卦象
+      players: gameInitData.entities?.map((entity: any, index: number) => ({
+        id: entity.id,
+        name: entity.name,
+        cash: entity.cash,
+        attributes: entity.attributes || {},
+        passiveIncome: entity.passiveIncome || 0,
+        passiveExpense: entity.passiveExpense || 0,
+        backstory: entity.backstory,
+        playerIndex: index,
+      })) || [],
+    } : null;
+
     // 如果已存在会话且处于进行中，直接返回
     let session = await prisma.gameSession.findUnique({ where: { roomId } });
     const now = new Date();
@@ -189,18 +271,36 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
           roundStatus: 'decision',
           status: 'playing',
           decisionDeadline: deadline,
+          gameState: initialGameState as any, // 写入初始化数据
         },
       });
     } else if (session.status !== 'playing') {
       // 重新开始或继续游戏时，重置到决策阶段
+      // 如果 gameState 为空，则写入初始化数据
       session = await prisma.gameSession.update({
         where: { id: session.id },
         data: {
           status: 'playing',
           roundStatus: 'decision',
           decisionDeadline: deadline,
+          ...(session.gameState ? {} : { gameState: initialGameState as any }),
         },
       });
+    } else {
+      // 会话已存在且正在进行中，检查是否需要更新 deadline
+      // 如果当前是决策阶段且 deadline 已过期或为空，则更新 deadline
+      if (session.roundStatus === 'decision') {
+        const currentDeadline = session.decisionDeadline ? new Date(session.decisionDeadline) : null;
+        if (!currentDeadline || currentDeadline < now) {
+          // deadline 已过期或为空，更新为新的 deadline
+          session = await prisma.gameSession.update({
+            where: { id: session.id },
+            data: {
+              decisionDeadline: deadline,
+            },
+          });
+        }
+      }
     }
 
     // 标记房间状态为 playing
@@ -1491,6 +1591,25 @@ router.post(
         orderBy: { createdAt: 'asc' },
       });
 
+      // 从 Redis 获取游戏初始化数据
+      const initKey = `game:init:${session.roomId}`;
+      const initDataStr = await redis.get(initKey);
+      let gameInitData = null;
+      if (initDataStr) {
+        try {
+          gameInitData = JSON.parse(initDataStr);
+          logger.info(`Loaded game init data for room ${session.roomId}`, {
+            hasBackgroundStory: !!gameInitData?.backgroundStory,
+            entitiesCount: gameInitData?.entities?.length || 0,
+            hasHexagram: !!gameInitData?.yearlyHexagram,
+          });
+        } catch (e) {
+          logger.warn(`Failed to parse game init data for room ${session.roomId}`, { error: e });
+        }
+      } else {
+        logger.warn(`No game init data found for room ${session.roomId}`);
+      }
+
       // 构建推演数据
       const inferenceData = {
         sessionId,
@@ -1516,6 +1635,12 @@ router.post(
         })),
         gameRules: hostConfig.gameRules || '',
         currentRound: session.currentRound,
+        // 传入游戏初始化数据（主体名称、背景故事、卦象等）
+        gameInitData: gameInitData ? {
+          backgroundStory: gameInitData.backgroundStory,
+          entities: gameInitData.entities,
+          yearlyHexagram: gameInitData.yearlyHexagram,
+        } : undefined,
       };
 
       // 更新会话状态为 inference
@@ -1994,6 +2119,12 @@ function buildTurnResultDTO(
   };
   branchingNarratives?: string[];
   nextRoundHints?: string;
+  roundTitle?: string;
+  cashFlowWarning?: Array<{
+    entityId: string;
+    message: string;
+    severity: 'warning' | 'critical';
+  }>;
 } {
   // 如果已经是符合契约的结构，直接返回
   if (result && result.narrative && Array.isArray(result.perEntityPanel)) {
@@ -2012,6 +2143,8 @@ function buildTurnResultDTO(
       ledger: result.ledger,
       branchingNarratives: result.branchingNarratives,
       nextRoundHints: result.nextRoundHints || '',
+      roundTitle: result.roundTitle,
+      cashFlowWarning: result.cashFlowWarning,
     };
   }
 
@@ -2123,6 +2256,8 @@ function buildTurnResultDTO(
     ledger: result?.ledger,
     branchingNarratives: result?.branchingNarratives,
     nextRoundHints: result?.nextRoundHints || result?.hints || '',
+    roundTitle: result?.roundTitle,
+    cashFlowWarning: result?.cashFlowWarning,
   };
 }
 
@@ -2444,8 +2579,18 @@ router.get(
 
       // 获取推演结果（如果有）
       let inferenceResult = null;
+      
+      // 根据当前阶段决定获取哪个回合的推演结果
       if (session.roundStatus === 'result' || session.roundStatus === 'inference') {
+        // 结果阶段或推演阶段：获取当前回合的推演结果
         const resultKey = `inference:result:${sessionId}:${session.currentRound}`;
+        const resultData = await redis.get(resultKey);
+        if (resultData) {
+          inferenceResult = JSON.parse(resultData);
+        }
+      } else if (session.roundStatus === 'decision' && session.currentRound > 1) {
+        // 决策阶段且不是第一回合：获取上一回合的推演结果作为背景
+        const resultKey = `inference:result:${sessionId}:${session.currentRound - 1}`;
         const resultData = await redis.get(resultKey);
         if (resultData) {
           inferenceResult = JSON.parse(resultData);
@@ -2551,12 +2696,21 @@ router.post(
 
       // 进入下一回合
       const nextRound = session.currentRound + 1;
+      
+      // 获取主持人配置的决策时限
+      const hostConfig = await prisma.hostConfig.findUnique({
+        where: { roomId: session.roomId },
+        select: { decisionTimeLimit: true },
+      });
+      const decisionMinutes = hostConfig?.decisionTimeLimit || 4;
+      const newDeadline = new Date(Date.now() + decisionMinutes * 60 * 1000);
+      
       await prisma.gameSession.update({
         where: { id: sessionId },
         data: {
           currentRound: nextRound,
           roundStatus: 'decision',
-          decisionDeadline: null,
+          decisionDeadline: newDeadline,
           updatedAt: new Date(),
         },
       });
@@ -2567,6 +2721,7 @@ router.post(
         previousRound: roundNumber,
         currentRound: nextRound,
         roundStatus: 'decision',
+        decisionDeadline: newDeadline.toISOString(),
       });
 
       // 广播阶段切换通知
@@ -2575,6 +2730,17 @@ router.post(
         round: nextRound,
         stage: 'decision',
         previousStage: 'result',
+        decisionDeadline: newDeadline.toISOString(),
+      });
+
+      // 广播游戏状态更新（确保前端能收到新的 deadline）
+      io.to(session.roomId).emit('game_state_update', {
+        roomId: session.roomId,
+        sessionId,
+        currentRound: nextRound,
+        roundStatus: 'decision',
+        decisionDeadline: newDeadline.toISOString(),
+        status: session.status,
       });
 
       return res.json({
@@ -2585,6 +2751,7 @@ router.post(
           previousRound: roundNumber,
           currentRound: nextRound,
           roundStatus: 'decision',
+          decisionDeadline: newDeadline.toISOString(),
         },
       });
     } catch (error) {
@@ -3131,5 +3298,176 @@ router.delete(
     }
   }
 );
+
+/**
+ * PUT /api/game/:sessionId/adjust-time-limit
+ * 主持人调整当前回合的时限
+ */
+router.put('/:sessionId/adjust-time-limit', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { sessionId } = req.params;
+    const { additionalMinutes } = req.body;
+    
+    if (!userId) throw new AppError('Unauthorized', 401);
+    
+    // 获取游戏会话
+    const session = await prisma.gameSession.findUnique({
+      where: { id: sessionId },
+      include: { room: true }
+    });
+    
+    if (!session) throw new AppError('游戏会话不存在', 404);
+    
+    // 确保用户是主持人
+    if (session.room.hostId !== userId) {
+      throw new AppError('只有主持人可以调整时限', 403);
+    }
+    
+    // 只能在决策阶段调整时限
+    if (session.roundStatus !== 'decision') {
+      throw new AppError('只能在决策阶段调整时限', 400);
+    }
+    
+    // 验证参数
+    if (!additionalMinutes || additionalMinutes < 1 || additionalMinutes > 60) {
+      throw new AppError('延长时间必须在1-60分钟之间', 400);
+    }
+    
+    // 计算新的截止时间
+    const currentDeadline = session.decisionDeadline ? new Date(session.decisionDeadline) : new Date();
+    const newDeadline = new Date(currentDeadline.getTime() + additionalMinutes * 60 * 1000);
+    
+    // 更新数据库
+    await prisma.gameSession.update({
+      where: { id: sessionId },
+      data: { decisionDeadline: newDeadline }
+    });
+    
+    // 通过WebSocket广播时限调整
+    io.to(session.roomId).emit('time_limit_adjusted', {
+      sessionId,
+      newDeadline: newDeadline.toISOString(),
+      additionalMinutes,
+      adjustedBy: userId
+    });
+    
+    res.json({
+      code: 200,
+      message: `时限已延长${additionalMinutes}分钟`,
+      data: {
+        newDeadline: newDeadline.toISOString(),
+        additionalMinutes
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/game/:sessionId/recovery/status
+ * 检查游戏状态异常
+ */
+router.get('/:sessionId/recovery/status', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { sessionId } = req.params;
+    
+    if (!userId) throw new AppError('Unauthorized', 401);
+    
+    // 检查用户权限（主持人或参与者）
+    const session = await prisma.gameSession.findUnique({
+      where: { id: sessionId },
+      include: { room: true }
+    });
+    
+    if (!session) throw new AppError('游戏会话不存在', 404);
+    
+    const isHost = session.room.hostId === userId;
+    const membership = await prisma.roomPlayer.findFirst({
+      where: { roomId: session.roomId, userId }
+    });
+    
+    if (!isHost && !membership) {
+      throw new AppError('无权限访问此游戏', 403);
+    }
+    
+    const recoveryState = await gameRecoveryService.detectGameStateAnomalies(sessionId);
+    
+    res.json({
+      code: 200,
+      data: {
+        hasAnomalies: !!recoveryState,
+        recoveryState,
+        canRecover: isHost // 只有主持人可以执行恢复操作
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/game/:sessionId/recovery/execute
+ * 执行游戏恢复操作（仅主持人）
+ */
+router.post('/:sessionId/recovery/execute', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { sessionId } = req.params;
+    const { action } = req.body;
+    
+    if (!userId) throw new AppError('Unauthorized', 401);
+    
+    if (!action) {
+      throw new AppError('请指定恢复操作', 400);
+    }
+    
+    const result = await gameRecoveryService.executeRecovery(sessionId, action, userId);
+    
+    res.json({
+      code: result.success ? 200 : 400,
+      message: result.message,
+      data: result.newState
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/game/:sessionId/recovery/snapshot
+ * 创建游戏状态快照（仅主持人）
+ */
+router.post('/:sessionId/recovery/snapshot', authenticateToken, async (req: AuthRequest, res, next) => {
+  try {
+    const userId = req.userId;
+    const { sessionId } = req.params;
+    
+    if (!userId) throw new AppError('Unauthorized', 401);
+    
+    // 确保用户是主持人
+    const session = await prisma.gameSession.findUnique({
+      where: { id: sessionId },
+      include: { room: true }
+    });
+    
+    if (!session) throw new AppError('游戏会话不存在', 404);
+    if (session.room.hostId !== userId) {
+      throw new AppError('只有主持人可以创建快照', 403);
+    }
+    
+    const snapshotId = await gameRecoveryService.createGameSnapshot(sessionId);
+    
+    res.json({
+      code: 200,
+      message: '游戏快照创建成功',
+      data: { snapshotId }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

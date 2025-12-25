@@ -74,6 +74,33 @@ export const registerGameHandler = (io: Server, socket: AuthedSocket): void => {
       socket.emit('error', { code: 'SESSION_SYNC_FAILED', message: '会话状态同步失败' });
     }
   });
+
+  // 获取增量更新
+  socket.on('get_session_deltas', async (payload: { sessionId: string; fromVersion: number }, ack?: (deltas: unknown) => void) => {
+    try {
+      if (!payload?.sessionId) return;
+      const deltas = await getSessionDeltas(payload.sessionId, payload.fromVersion);
+      socket.emit('session_deltas', { sessionId: payload.sessionId, deltas });
+      ack?.(deltas);
+    } catch (error) {
+      logger.error('get_session_deltas handler error', error);
+      socket.emit('error', { code: 'GET_DELTAS_FAILED', message: '获取增量更新失败' });
+    }
+  });
+
+  // Handle ping events for latency measurement
+  socket.on('ping', (callback) => {
+    if (typeof callback === 'function') {
+      callback();
+    }
+  });
+
+  // Alternative ping-pong implementation with timestamp
+  socket.on('ping_with_timestamp', (timestamp: number, callback) => {
+    if (typeof callback === 'function') {
+      callback({ timestamp });
+    }
+  });
 };
 
 

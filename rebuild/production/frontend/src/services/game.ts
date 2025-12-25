@@ -1,3 +1,4 @@
+import axios from 'axios';
 import apiClient from './api';
 
 export interface GameSessionSummary {
@@ -446,6 +447,23 @@ export const gameAPI = {
     return response.data.data;
   },
 
+  // 调整回合时限
+  adjustTimeLimit: async (
+    sessionId: string,
+    additionalMinutes: number
+  ): Promise<{
+    newDeadline: string;
+    additionalMinutes: number;
+  }> => {
+    const response = await apiClient.put(`/game/${sessionId}/adjust-time-limit`, {
+      additionalMinutes
+    }) as any;
+    if (response?.code === 200 && response.data) {
+      return response.data;
+    }
+    throw new Error(response?.message || '调整时限失败');
+  },
+
   // 第十三阶段：游戏存档功能
   saveGame: async (
     sessionId: string,
@@ -699,11 +717,41 @@ export const gameInitAPI = {
     roomId: string,
     config: GameInitConfig
   ): Promise<GameInitResult> => {
-    const response = await apiClient.post(`/game/${roomId}/generate-init`, config) as any;
-    if (response?.code === 200 && response.data) {
-      return response.data;
+    // 为AI初始化创建专门的长超时客户端
+    const longTimeoutClient = axios.create({
+      baseURL: apiClient.defaults.baseURL,
+      timeout: 300000, // 5分钟超时
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiClient.defaults.headers.Authorization,
+      },
+    });
+
+    // 添加token
+    const token = localStorage.getItem('token');
+    if (token) {
+      longTimeoutClient.defaults.headers.Authorization = `Bearer ${token}`;
     }
-    throw new Error(response?.message || '生成游戏初始化数据失败');
+
+    try {
+      const response = await longTimeoutClient.post(`/game/${roomId}/generate-init`, config) as any;
+      if (response?.data?.code === 200 && response.data.data) {
+        return response.data.data;
+      }
+      throw new Error(response?.data?.message || '生成游戏初始化数据失败');
+    } catch (error: any) {
+      // 增强错误处理
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('AI生成超时，请检查网络连接或稍后重试');
+      } else if (error.response?.status === 401) {
+        throw new Error('认证失败，请重新登录');
+      } else if (error.response?.status === 400) {
+        throw new Error(error.response.data?.message || '请求参数错误');
+      } else if (error.response?.status >= 500) {
+        throw new Error('服务器错误，请稍后重试');
+      }
+      throw error;
+    }
   },
 
   /**

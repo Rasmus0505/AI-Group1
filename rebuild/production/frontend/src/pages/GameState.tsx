@@ -18,6 +18,8 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   RightOutlined,
+  ArrowLeftOutlined as ArrowLeft,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { gameAPI } from '../services/game';
 import apiClient from '../services/api';
@@ -25,6 +27,8 @@ import { wsService } from '../services/websocket';
 import { useSocket } from '../hooks/useSocket';
 import { useMessageRouter } from '../hooks/useMessageRouter';
 import { useAuthStore } from '../stores/authStore';
+import { HelpButton } from '../components/HelpButton';
+import { GameRecoveryPanel } from '../components/GameRecoveryPanel';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -74,6 +78,7 @@ function GameStatePage() {
   const [history, setHistory] = useState<RoundHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [isHost, setIsHost] = useState(false);
+  const [recoveryPanelVisible, setRecoveryPanelVisible] = useState(false);
 
   const loadGameState = async () => {
     if (!sessionId) return;
@@ -83,8 +88,9 @@ function GameStatePage() {
       setGameState(data);
       
       // 检查是否是主持人（直接使用返回的hostId）
-      if (data.hostId && user?.id) {
-        setIsHost(data.hostId === user.id);
+      const currentUserId = user?.userId || user?.id;
+      if (data.hostId && currentUserId) {
+        setIsHost(data.hostId === currentUserId);
       } else {
         setIsHost(false);
       }
@@ -128,6 +134,13 @@ function GameStatePage() {
     if (!sessionId) return;
     wsService.setActiveSession(sessionId);
 
+    // 加入房间以接收 WebSocket 广播事件
+    // 注意：后端使用 io.to(roomId).emit() 广播事件，所以前端必须加入房间
+    if (gameState?.roomId) {
+      wsService.trackRoom(gameState.roomId);
+      wsService.send('join_room', { roomId: gameState.roomId });
+    }
+
     const handleRoundChanged = (payload: unknown) => {
       if (
         !payload ||
@@ -169,9 +182,24 @@ function GameStatePage() {
       loadGameState();
     };
 
+    const handleTimeLimitAdjusted = (payload: unknown) => {
+      if (
+        !payload ||
+        typeof payload !== 'object' ||
+        !('sessionId' in payload) ||
+        (payload as { sessionId?: string }).sessionId !== sessionId
+      ) {
+        return;
+      }
+      const adjustData = payload as { additionalMinutes?: number };
+      message.info(`主持人已延长时限${adjustData.additionalMinutes || 0}分钟`);
+      loadGameState();
+    };
+
     wsService.on('round_changed', handleRoundChanged);
     wsService.on('stage_changed', handleStageChanged);
     wsService.on('game_finished', handleGameFinished);
+    wsService.on('time_limit_adjusted', handleTimeLimitAdjusted);
 
     // 初始加载
     loadGameState();
@@ -180,15 +208,20 @@ function GameStatePage() {
     // 定期刷新
     const refreshInterval = setInterval(() => {
       loadGameState();
-    }, 5000);
+    }, 3000); // 从5秒改为3秒，提高刷新频率
 
     return () => {
+      // 离开房间
+      if (gameState?.roomId) {
+        wsService.untrackRoom(gameState.roomId);
+      }
       wsService.off('round_changed', handleRoundChanged);
       wsService.off('stage_changed', handleStageChanged);
       wsService.off('game_finished', handleGameFinished);
+      wsService.off('time_limit_adjusted', handleTimeLimitAdjusted);
       clearInterval(refreshInterval);
     };
-  }, [sessionId]);
+  }, [sessionId, gameState?.roomId]);
 
   if (loading && !gameState) {
     return (
@@ -232,8 +265,15 @@ function GameStatePage() {
   };
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
-      <Card>
+    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', minHeight: '100vh' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <Button
+          onClick={() => navigate('/rooms')}
+        >
+          回到房间列表
+        </Button>
+      </div>
+      <Card style={{ maxHeight: '80vh', overflowY: 'auto' }}>
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           {/* 游戏状态概览 */}
           <div>
@@ -290,26 +330,55 @@ function GameStatePage() {
                 <Text type="secondary">
                   所有玩家已提交决策或倒计时已结束，你可以进入审核阶段开始审核。
                 </Text>
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  onClick={async () => {
-                    try {
-                      await gameAPI.startReview(sessionId!);
-                      message.success('已进入审核阶段');
-                      // 刷新状态
-                      await loadGameState();
-                      navigate(`/game/${sessionId}/review`);
-                    } catch (err: any) {
-                      message.error(err?.response?.data?.message || '进入审核阶段失败');
-                      // 即使失败也刷新状态
-                      loadGameState();
-                    }
-                  }}
-                >
-                  进入审核阶段
-                </Button>
+                <Space>
+                  <Button
+                    type="primary"
+                    size="large"
+                    onClick={async () => {
+                      try {
+                        await gameAPI.startReview(sessionId!);
+                        message.success('已进入审核阶段');
+                        // 刷新状态
+                        await loadGameState();
+                        navigate(`/game/${sessionId}/review`);
+                      } catch (err: any) {
+                        message.error(err?.response?.data?.message || '进入审核阶段失败');
+                        // 即使失败也刷新状态
+                        loadGameState();
+                      }
+                    }}
+                  >
+                    进入审核阶段
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const additionalMinutes = 5; // 默认延长5分钟
+                        await gameAPI.adjustTimeLimit(sessionId!, additionalMinutes);
+                        message.success(`时限已延长${additionalMinutes}分钟`);
+                        loadGameState();
+                      } catch (err: any) {
+                        message.error(err?.response?.data?.message || '调整时限失败');
+                      }
+                    }}
+                  >
+                    延长5分钟
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const additionalMinutes = 10; // 延长10分钟
+                        await gameAPI.adjustTimeLimit(sessionId!, additionalMinutes);
+                        message.success(`时限已延长${additionalMinutes}分钟`);
+                        loadGameState();
+                      } catch (err: any) {
+                        message.error(err?.response?.data?.message || '调整时限失败');
+                      }
+                    }}
+                  >
+                    延长10分钟
+                  </Button>
+                </Space>
               </Space>
             </Card>
           )}
@@ -419,6 +488,15 @@ function GameStatePage() {
           {/* 快速导航 */}
           <Divider />
           <Space>
+            <HelpButton />
+            <Button 
+              danger 
+              icon={<ExclamationCircleOutlined />}
+              onClick={() => setRecoveryPanelVisible(true)}
+              disabled={!isHost}
+            >
+              游戏恢复
+            </Button>
             {isHost && gameState.roundStatus === 'decision' && (
               <Button
                 type="primary"
@@ -460,6 +538,17 @@ function GameStatePage() {
           </Space>
         </Space>
       </Card>
+
+      {/* 游戏恢复面板 */}
+      <GameRecoveryPanel
+        sessionId={sessionId || ''}
+        visible={recoveryPanelVisible}
+        onClose={() => setRecoveryPanelVisible(false)}
+        onRecoveryComplete={() => {
+          loadGameState();
+          loadHistory();
+        }}
+      />
     </div>
   );
 }

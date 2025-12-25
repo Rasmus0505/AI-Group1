@@ -19,6 +19,7 @@ import {
   Table,
   Switch,
   Tooltip,
+  Modal,
 } from 'antd';
 import {
   ReloadOutlined,
@@ -27,9 +28,12 @@ import {
   QuestionCircleOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import { hostConfigAPI, HostConfig } from '../services/rooms';
 import { gameAPI, gameInitAPI, GameInitResult } from '../services/game';
+import { HelpButton } from '../components/HelpButton';
+import { DEFAULT_GAME_RULES } from '../constants/defaultRules';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -163,6 +167,12 @@ function HostSetup() {
   // 游戏初始化状态
   const [initData, setInitData] = useState<GameInitResult | null>(null);
   const [generatingInit, setGeneratingInit] = useState(false);
+  
+  // 默认规则Modal状态
+  const [defaultRulesVisible, setDefaultRulesVisible] = useState(false);
+  
+  // 标记是否已从服务器加载配置（防止 provider 变化时覆盖已保存的值）
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   const currentStep = useMemo(() => {
     if (config?.initializationCompleted) return 4;
@@ -171,25 +181,38 @@ function HostSetup() {
     return 1;
   }, [config, initData]);
 
-  // 根据提供商更新可用模型
+  // 根据提供商更新可用模型（仅在用户手动切换且配置未加载时更新）
   useEffect(() => {
     const provider = AI_PROVIDERS.find(p => p.id === selectedProvider);
     if (provider) {
       setAvailableModels(provider.models);
-      if (provider.id !== 'custom') {
+      // 只有在配置未加载时才设置默认值，避免覆盖已保存的配置
+      if (!configLoaded && provider.id !== 'custom') {
         formApi.setFieldsValue({
           endpoint: provider.endpoint,
           model: provider.defaultModel,
         });
       }
     }
-  }, [selectedProvider, formApi]);
+  }, [selectedProvider, formApi, configLoaded]);
 
   // 加载配置并同步到表单
   const loadConfig = useCallback(async () => {
     if (!roomId) return;
     setLoading(true);
     try {
+      // 先检查房间状态，如果游戏已开始则重定向
+      try {
+        const session = await gameAPI.getActiveSessionByRoom(roomId);
+        if (session && session.sessionId) {
+          message.info('游戏已开始，正在跳转到游戏页面...');
+          navigate(`/game/${session.sessionId}/state`, { replace: true });
+          return;
+        }
+      } catch {
+        // 没有活跃会话，继续加载配置
+      }
+      
       const data = await hostConfigAPI.get(roomId);
       setConfig(data);
       
@@ -253,12 +276,15 @@ function HostSetup() {
       } catch {
         // 忽略，可能还没有初始化数据
       }
+      
+      // 标记配置已加载，防止 provider useEffect 覆盖已保存的值
+      setConfigLoaded(true);
     } catch (error) {
       message.error((error as Error).message || '获取主持人配置失败');
     } finally {
       setLoading(false);
     }
-  }, [roomId, formApi, formRules, formPlayers]);
+  }, [roomId, formApi, formRules, formPlayers, navigate]);
 
   useEffect(() => {
     loadConfig();
@@ -390,19 +416,101 @@ function HostSetup() {
       return;
     }
 
+    // 检查API配置
+    if (!config.apiEndpoint || !config.apiHeaders) {
+      message.error('请先完成AI API配置');
+      return;
+    }
+
     setGeneratingInit(true);
+    
+    // 显示进度提示
+    const hideLoading = message.loading('正在生成初始化数据，这可能需要1-5分钟，请耐心等待...', 0);
+    
+    // 重试机制
+    const maxRetries = 2;
+    let currentAttempt = 0;
+    
+    const attemptGeneration = async (): Promise<any> => {
+      currentAttempt++;
+      
+      try {
+        console.log(`开始生成初始化数据... (尝试 ${currentAttempt}/${maxRetries + 1})`, {
+          roomId,
+          entityCount,
+          gameMode: values.gameMode,
+          initialCash: values.initialCash,
+          industryTheme: values.industryTheme,
+          apiEndpoint: config.apiEndpoint,
+          hasApiHeaders: !!config.apiHeaders
+        });
+
+        const result = await gameInitAPI.generateInit(roomId, {
+          entityCount,
+          gameMode: values.gameMode,
+          initialCash: values.initialCash,
+          industryTheme: values.industryTheme,
+        });
+        
+        console.log('初始化数据生成成功:', result);
+        return result;
+      } catch (error: any) {
+        console.error(`Generate init error (attempt ${currentAttempt}):`, error);
+        
+        // 如果是超时错误且还有重试次数，则重试
+        if ((error.code === 'ECONNABORTED' || error.message?.includes('timeout')) && currentAttempt <= maxRetries) {
+          message.warning(`第${currentAttempt}次尝试超时，正在重试... (${currentAttempt}/${maxRetries + 1})`);
+          // 等待2秒后重试
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return attemptGeneration();
+        }
+        
+        throw error;
+      }
+    };
+    
     try {
-      const result = await gameInitAPI.generateInit(roomId, {
-        entityCount,
-        gameMode: values.gameMode,
-        initialCash: values.initialCash,
-        industryTheme: values.industryTheme,
-      });
+      const result = await attemptGeneration();
       setInitData(result);
       message.success('游戏初始化数据生成成功！');
-    } catch (error) {
-      message.error((error as Error).message || '生成初始化数据失败');
+    } catch (error: any) {
+      console.error('Generate init error:', error);
+      
+      // 提供更详细的错误信息
+      let errorMessage = '生成初始化数据失败';
+      
+      if (error.message?.includes('超时') || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = `AI生成超时（已重试${maxRetries}次）。根据后端日志显示，AI初始化过程正在正常进行中，这通常需要1-5分钟时间。建议：1) 检查网络连接稳定性 2) 稍后再试 3) 如果问题持续，可能是网络环境限制`;
+      } else if (error.response?.status === 401 || error.message?.includes('认证')) {
+        errorMessage = 'API密钥无效或已过期，请检查AI API配置中的密钥是否正确';
+      } else if (error.response?.status === 404 || error.message?.includes('端点')) {
+        errorMessage = 'API端点不存在，请检查AI API配置中的端点地址';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'API调用频率超限，请稍后重试';
+      } else if (error.response?.status >= 500) {
+        errorMessage = 'AI服务器错误，请稍后重试';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      message.error(errorMessage);
+      
+      // 显示详细错误信息供调试
+      if (error.response?.data) {
+        console.error('API Error Details:', error.response.data);
+      }
+      
+      // 显示网络错误详情
+      if (error.code) {
+        console.error('Network Error Code:', error.code);
+        
+        // 为ECONNABORTED提供特殊提示
+        if (error.code === 'ECONNABORTED') {
+          message.info('提示：后端日志显示AI初始化正在正常进行，建议检查网络环境或稍后重试', 10);
+        }
+      }
     } finally {
+      hideLoading();
       setGeneratingInit(false);
     }
   };
@@ -453,6 +561,7 @@ function HostSetup() {
         <Button icon={<ReloadOutlined />} onClick={loadConfig} loading={loading}>
           刷新
         </Button>
+        <HelpButton />
       </Space>
 
       <Steps
@@ -585,9 +694,42 @@ function HostSetup() {
       {/* Step 2 - 规则与玩家配置 */}
       <Card title="Step 2 - 规则与玩家配置" loading={loading}>
         <Form form={formRules} layout="vertical" onFinish={handleSaveRules}>
-          <Form.Item label="游戏规则 (Markdown 可选)" name="gameRules">
-            <TextArea rows={4} placeholder="在此描述游戏规则，留空则使用默认的《凡墙皆是门》蓝本规则..." />
+          <Form.Item 
+            label={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>游戏规则 (Markdown 可选)</span>
+                <Button 
+                  type="link" 
+                  size="small"
+                  icon={<BookOutlined />}
+                  onClick={() => setDefaultRulesVisible(true)}
+                >
+                  查看默认蓝本规则
+                </Button>
+              </div>
+            } 
+            name="gameRules"
+          >
+            <TextArea 
+              rows={6} 
+              placeholder="在此描述游戏规则，留空则使用默认的《凡墙皆是门》蓝本规则..." 
+            />
           </Form.Item>
+          
+          <Alert
+            message="规则配置说明"
+            description={
+              <div>
+                <p style={{ margin: '0 0 8px 0' }}>• 留空将自动使用《凡墙皆是门》默认蓝本规则</p>
+                <p style={{ margin: '0 0 8px 0' }}>• 支持 Markdown 格式，可以添加标题、列表等</p>
+                <p style={{ margin: 0 }}>• 点击右上角"查看默认蓝本规则"可以参考完整的默认规则</p>
+              </div>
+            }
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          
           <Space>
             <Button type="primary" htmlType="submit" loading={saving}>
               保存规则
@@ -598,27 +740,98 @@ function HostSetup() {
         <Divider />
 
         <Form form={formPlayers} layout="vertical" onFinish={handleSavePlayers}>
+          <Alert
+            message="人数配置公式"
+            description="人类玩家数 + AI玩家数 = 总决策主体数"
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
           <Form.Item
             label="总决策主体数"
             name="totalDecisionEntities"
             rules={[{ required: true, message: '请输入总主体数' }]}
-            tooltip="游戏中参与决策的企业/角色总数"
+            tooltip="游戏中参与决策的企业/角色总数（人类玩家 + AI玩家）"
           >
-            <InputNumber min={2} max={10} placeholder="2-10" style={{ width: 120 }} />
+            <InputNumber 
+              min={2} 
+              max={10} 
+              placeholder="2-10" 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value) {
+                  const humanCount = formPlayers.getFieldValue('humanPlayerCount') || 0;
+                  const aiCount = value - humanCount;
+                  if (aiCount >= 0) {
+                    formPlayers.setFieldsValue({ aiPlayerCount: aiCount });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="人类玩家数"
             name="humanPlayerCount"
-            rules={[{ required: true, message: '请输入人类玩家数' }]}
+            rules={[
+              { required: true, message: '请输入人类玩家数' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const total = getFieldValue('totalDecisionEntities');
+                  const aiCount = getFieldValue('aiPlayerCount') || 0;
+                  if (total && value + aiCount !== total) {
+                    return Promise.reject(new Error(`人类玩家(${value}) + AI玩家(${aiCount}) 必须等于总主体数(${total})`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
           >
-            <InputNumber min={1} placeholder="请输入..." style={{ width: 120 }} />
+            <InputNumber 
+              min={1} 
+              placeholder="请输入..." 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value !== null && value !== undefined) {
+                  const total = formPlayers.getFieldValue('totalDecisionEntities');
+                  if (total) {
+                    const aiCount = total - value;
+                    formPlayers.setFieldsValue({ aiPlayerCount: Math.max(0, aiCount) });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="AI玩家数"
             name="aiPlayerCount"
-            rules={[{ required: true, message: '请输入AI玩家数' }]}
+            rules={[
+              { required: true, message: '请输入AI玩家数' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const total = getFieldValue('totalDecisionEntities');
+                  const humanCount = getFieldValue('humanPlayerCount') || 0;
+                  if (total && humanCount + value !== total) {
+                    return Promise.reject(new Error(`人类玩家(${humanCount}) + AI玩家(${value}) 必须等于总主体数(${total})`));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
           >
-            <InputNumber min={0} placeholder="请输入..." style={{ width: 120 }} />
+            <InputNumber 
+              min={0} 
+              placeholder="请输入..." 
+              style={{ width: 120 }} 
+              onChange={(value) => {
+                if (value !== null && value !== undefined) {
+                  const total = formPlayers.getFieldValue('totalDecisionEntities');
+                  if (total) {
+                    const humanCount = total - value;
+                    formPlayers.setFieldsValue({ humanPlayerCount: Math.max(1, humanCount) });
+                  }
+                }
+              }}
+            />
           </Form.Item>
           <Form.Item
             label="决策时限(分钟)"
@@ -797,12 +1010,24 @@ function HostSetup() {
                       {opt.description}
                     </Paragraph>
                     {opt.expectedDelta && (
-                      <Space>
-                        {Object.entries(opt.expectedDelta).map(([k, v]) => (
-                          <Tag key={k} color={v >= 0 ? 'green' : 'red'}>
-                            {k}: {v >= 0 ? '+' : ''}{v}
-                          </Tag>
-                        ))}
+                      <Space wrap>
+                        {Object.entries(opt.expectedDelta).map(([k, v]) => {
+                          // 处理嵌套对象的情况（如按主体分组的预期变化）
+                          if (typeof v === 'object' && v !== null) {
+                            return Object.entries(v).map(([subK, subV]) => (
+                              <Tag key={`${k}-${subK}`} color={typeof subV === 'number' && subV >= 0 ? 'green' : 'red'}>
+                                {k}/{subK}: {typeof subV === 'number' ? (subV >= 0 ? '+' : '') + subV : String(subV)}
+                              </Tag>
+                            ));
+                          }
+                          // 处理普通数值
+                          const numVal = typeof v === 'number' ? v : 0;
+                          return (
+                            <Tag key={k} color={numVal >= 0 ? 'green' : 'red'}>
+                              {k}: {numVal >= 0 ? '+' : ''}{numVal}
+                            </Tag>
+                          );
+                        })}
                       </Space>
                     )}
                   </Card>
@@ -873,6 +1098,85 @@ function HostSetup() {
           <Text type="secondary">尚未加载配置</Text>
         )}
       </Card>
+
+      {/* 默认规则查看Modal */}
+      <Modal
+        title={
+          <Space>
+            <BookOutlined />
+            <span>《凡墙皆是门》默认蓝本规则</span>
+          </Space>
+        }
+        open={defaultRulesVisible}
+        onCancel={() => setDefaultRulesVisible(false)}
+        width={800}
+        footer={[
+          <Button 
+            key="copy" 
+            onClick={() => {
+              navigator.clipboard.writeText(DEFAULT_GAME_RULES);
+              message.success('规则已复制到剪贴板');
+            }}
+          >
+            复制规则
+          </Button>,
+          <Button 
+            key="use" 
+            type="primary"
+            onClick={() => {
+              formRules.setFieldsValue({ gameRules: DEFAULT_GAME_RULES });
+              setDefaultRulesVisible(false);
+              message.success('默认规则已填入表单，请记得保存');
+            }}
+          >
+            使用此规则
+          </Button>,
+          <Button key="close" onClick={() => setDefaultRulesVisible(false)}>
+            关闭
+          </Button>
+        ]}
+      >
+        <div style={{ 
+          maxHeight: '60vh', 
+          overflowY: 'auto',
+          padding: '20px',
+          backgroundColor: '#fafafa',
+          borderRadius: '8px',
+          border: '1px solid #d9d9d9'
+        }}>
+          <div style={{ 
+            whiteSpace: 'pre-wrap', 
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            fontSize: '14px',
+            lineHeight: '1.8',
+            color: '#262626',
+            margin: 0
+          }}>
+            {DEFAULT_GAME_RULES.split('\n').map((line, index) => {
+              if (line.startsWith('# ')) {
+                return <h1 key={index} style={{ fontSize: '20px', fontWeight: 'bold', color: '#1890ff', marginBottom: '16px', marginTop: index > 0 ? '24px' : '0' }}>{line.substring(2)}</h1>;
+              } else if (line.startsWith('## ')) {
+                return <h2 key={index} style={{ fontSize: '16px', fontWeight: 'bold', color: '#52c41a', marginBottom: '12px', marginTop: '20px' }}>{line.substring(3)}</h2>;
+              } else if (line.startsWith('### ')) {
+                return <h3 key={index} style={{ fontSize: '14px', fontWeight: 'bold', color: '#fa8c16', marginBottom: '8px', marginTop: '16px' }}>{line.substring(4)}</h3>;
+              } else if (line.startsWith('- ')) {
+                return <div key={index} style={{ marginLeft: '16px', marginBottom: '4px' }}>• {line.substring(2)}</div>;
+              } else if (line.trim() === '') {
+                return <div key={index} style={{ height: '8px' }} />;
+              } else {
+                return <div key={index} style={{ marginBottom: '4px' }}>{line}</div>;
+              }
+            })}
+          </div>
+        </div>
+        <Alert
+          message="使用说明"
+          description="这是《凡墙皆是门》游戏的默认规则蓝本。您可以直接使用这些规则，也可以根据需要进行修改。留空规则配置将自动使用此默认蓝本。"
+          type="info"
+          showIcon
+          style={{ marginTop: 16 }}
+        />
+      </Modal>
     </Space>
   );
 }

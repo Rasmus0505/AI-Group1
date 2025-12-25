@@ -274,9 +274,73 @@ Invoke-InDirectory -Path $BackendPath -ScriptBlock {
 }
 Write-Host ""
 
-### 7. Frontend dependencies
-Write-Host "[7/7] Frontend dependencies..." -ForegroundColor Yellow
+### 7. Frontend env + dependencies
+Write-Host "[7/8] Frontend env / dependencies..." -ForegroundColor Yellow
+
+# 获取本机局域网IP地址（排除虚拟网卡）
+function Get-LocalLanIP {
+    $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
+        $_.IPAddress -notlike "127.*" -and           # 排除本地回环
+        $_.IPAddress -notlike "172.*" -and           # 排除所有172网段（Docker/WSL/Hyper-V）
+        $_.IPAddress -notlike "198.18.*" -and        # 排除代理软件虚拟网卡
+        $_.IPAddress -notlike "169.254.*" -and       # 排除 APIPA
+        $_.IPAddress -ne "10.0.0.1" -and             # 排除虚拟网卡常用地址
+        $_.PrefixOrigin -ne "WellKnown"              # 排除系统保留地址
+    }
+    
+    # 优先选择 10.x 网段（教室/公司局域网常用，但排除10.0.0.x）
+    foreach ($adapter in $networkAdapters) {
+        $ip = $adapter.IPAddress
+        if ($ip -like "10.*" -and $ip -notlike "10.0.0.*") {
+            return $ip
+        }
+    }
+    
+    # 其次选择 192.168.x 网段（家庭路由器常用）
+    foreach ($adapter in $networkAdapters) {
+        $ip = $adapter.IPAddress
+        if ($ip -like "192.168.*") {
+            return $ip
+        }
+    }
+    
+    # 如果没有找到常见网段，返回第一个有效IP
+    if ($networkAdapters.Count -gt 0) {
+        return $networkAdapters[0].IPAddress
+    }
+    
+    return "localhost"
+}
+
+$LocalIP = Get-LocalLanIP
+Write-Host "Detected local LAN IP: $LocalIP" -ForegroundColor Cyan
+
 Invoke-InDirectory -Path $FrontendPath -ScriptBlock {
+    # 生成前端 .env 文件（每次都重新生成以确保IP正确）
+    $envFile = Join-Path (Get-Location) ".env"
+    
+    Write-Host "Generating frontend .env with LAN IP: $LocalIP" -ForegroundColor Yellow
+    
+    $envContent = @"
+# API配置 - 自动生成，使用本机局域网IP
+# Generated at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+# Local IP: $LocalIP
+VITE_API_BASE_URL=http://${LocalIP}:3000/api
+VITE_WS_URL=http://${LocalIP}:3000
+
+# 应用配置
+VITE_APP_TITLE=AI文字交互式游戏
+VITE_APP_VERSION=1.0.0
+
+# 功能开关
+VITE_ENABLE_DEVTOOLS=true
+VITE_ENABLE_MOCK=false
+"@
+    
+    $envContent | Out-File -FilePath $envFile -Encoding UTF8 -Force
+    Write-Host "Frontend .env created with IP: $LocalIP" -ForegroundColor Green
+    
+    # 安装前端依赖
     if (-not (Test-Path "node_modules")) {
         Write-Host "frontend node_modules not found, running npm install ..." -ForegroundColor Yellow
         npm install --no-audit --no-fund
@@ -287,7 +351,7 @@ Invoke-InDirectory -Path $FrontendPath -ScriptBlock {
 Write-Host ""
 
 ### 8. Start dev servers
-Write-Host "Starting backend and frontend dev servers..." -ForegroundColor Yellow
+Write-Host "[8/8] Starting backend and frontend dev servers..." -ForegroundColor Yellow
 
 Start-Process powershell -WorkingDirectory $BackendPath -ArgumentList @("-NoExit", "-Command", "npm run dev") | Out-Null
 Write-Host "Backend dev server started in new PowerShell window (port 3000 by default)." -ForegroundColor Green
@@ -298,8 +362,15 @@ Write-Host "Frontend dev server started in new PowerShell window (port 5173 by d
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "DONE. Check the new PowerShell windows for backend/frontend logs." -ForegroundColor Cyan
-Write-Host "Backend:  http://localhost:3000" -ForegroundColor Green
-Write-Host "Frontend: http://localhost:5173" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "LAN Access URLs (for other computers):" -ForegroundColor Yellow
+Write-Host "  Frontend: http://${LocalIP}:5173" -ForegroundColor Green
+Write-Host "  Backend:  http://${LocalIP}:3000" -ForegroundColor Green
+Write-Host ""
+Write-Host "Local Access URLs:" -ForegroundColor Yellow
+Write-Host "  Frontend: http://localhost:5173" -ForegroundColor Gray
+Write-Host "  Backend:  http://localhost:3000" -ForegroundColor Gray
 Write-Host "" -ForegroundColor Cyan
 Write-Host "Default Test Accounts:" -ForegroundColor Yellow
 Write-Host "  Developer Account: developer / 000000" -ForegroundColor Gray

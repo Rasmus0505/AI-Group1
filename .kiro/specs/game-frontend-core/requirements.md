@@ -1,8 +1,53 @@
-# Requirements Document
+# Requirements Document - Updated
 
 ## Introduction
 
 本文档定义了多人同步博弈推演游戏前端的核心功能需求。系统需要支持动态数据驱动、回合制状态机、实时通讯、非完全信息博弈等核心机制，为玩家提供沉浸式的策略对抗体验。
+
+**最后更新：** 2025-12-25  
+**当前版本：** v2.0  
+**实现状态：** 核心功能已完成，高级功能待实现
+
+## Implementation Status
+
+### ✅ 已完成 (Completed)
+- Requirement 1: Dynamic Attribute Mapping
+- Requirement 2: Multi-Entity Scaling  
+- Requirement 4: Phase State Machine
+- Requirement 5: WebSocket Event Handling
+- Requirement 6: Decision Input System
+- Requirement 8: Leaderboard System
+- Requirement 13: Hexagram Integration
+- Requirement 15: Achievement System
+- Requirement 17: Host Control Panel
+- Requirement 18: Reconnection Synchronization
+- Requirement 19: Timeout Handling
+
+### 🟡 部分完成 (Partially Implemented)
+- Requirement 7: Financial Calculation System (基础实现，需增强预算预览)
+- Requirement 9: Health Indicator Dashboard (基础实现，需完善指标)
+- Requirement 12: Temporary Events and Rules (后端完成，前端需优化)
+- Requirement 14: Streaming Text Display (基础实现，需增强效果)
+
+### ❌ 待实现 (Not Implemented)
+- Requirement 3: Fog of War Logic
+- Requirement 10: Multi-Channel Communication
+- Requirement 11: Trade Integration
+- Requirement 16: Drawer-Based Navigation
+
+## Priority Implementation Plan
+
+### P0 - Critical (阻塞多人游戏)
+1. **Requirement 3: Fog of War Logic** - 对手信息模糊化显示
+2. **Requirement 10: Multi-Channel Communication** - 多频道聊天系统
+
+### P1 - High (影响游戏体验)
+3. **Requirement 11: Trade Integration** - 玩家间交易系统
+4. **Requirement 16: Drawer-Based Navigation** - 抽屉式界面导航
+
+### P2 - Medium (提升用户体验)
+5. **Requirement 7: Financial Calculation System** - 增强财务计算
+6. **Requirement 14: Streaming Text Display** - 优化文本流式显示
 
 ## Glossary
 
