@@ -171,8 +171,8 @@ Invoke-InDirectory -Path $BackendPath -ScriptBlock {
         # Validate .env file format
         try {
             $envContent = Get-Content $envFile -Raw -ErrorAction Stop
-            # Check for common formatting issues
-            if ($envContent -match '\\"[^"]*$' -or $envContent -match '[^=]"[^=]*"[^=]' -or $envContent -match 'admin123456\\"') {
+            # Check for common formatting issues (escaped quotes, malformed values)
+            if ($envContent -match '\\\"' -or $envContent -match 'admin123456\\') {
                 Write-Host "backend .env file has formatting issues. Regenerating..." -ForegroundColor Yellow
                 $needsRegeneration = $true
             } else {
@@ -277,18 +277,18 @@ Write-Host ""
 ### 7. Frontend env + dependencies
 Write-Host "[7/8] Frontend env / dependencies..." -ForegroundColor Yellow
 
-# 获取本机局域网IP地址（排除虚拟网卡）
+# Get local LAN IP address (exclude virtual adapters)
 function Get-LocalLanIP {
     $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object {
-        $_.IPAddress -notlike "127.*" -and           # 排除本地回环
-        $_.IPAddress -notlike "172.*" -and           # 排除所有172网段（Docker/WSL/Hyper-V）
-        $_.IPAddress -notlike "198.18.*" -and        # 排除代理软件虚拟网卡
-        $_.IPAddress -notlike "169.254.*" -and       # 排除 APIPA
-        $_.IPAddress -ne "10.0.0.1" -and             # 排除虚拟网卡常用地址
-        $_.PrefixOrigin -ne "WellKnown"              # 排除系统保留地址
+        $_.IPAddress -notlike "127.*" -and           # Exclude loopback
+        $_.IPAddress -notlike "172.*" -and           # Exclude Docker/WSL/Hyper-V
+        $_.IPAddress -notlike "198.18.*" -and        # Exclude proxy virtual adapters
+        $_.IPAddress -notlike "169.254.*" -and       # Exclude APIPA
+        $_.IPAddress -ne "10.0.0.1" -and             # Exclude common virtual adapter address
+        $_.PrefixOrigin -ne "WellKnown"              # Exclude system reserved addresses
     }
     
-    # 优先选择 10.x 网段（教室/公司局域网常用，但排除10.0.0.x）
+    # Prefer 10.x subnet (common in classroom/office LANs, but exclude 10.0.0.x)
     foreach ($adapter in $networkAdapters) {
         $ip = $adapter.IPAddress
         if ($ip -like "10.*" -and $ip -notlike "10.0.0.*") {
@@ -296,7 +296,7 @@ function Get-LocalLanIP {
         }
     }
     
-    # 其次选择 192.168.x 网段（家庭路由器常用）
+    # Then try 192.168.x subnet (common for home routers)
     foreach ($adapter in $networkAdapters) {
         $ip = $adapter.IPAddress
         if ($ip -like "192.168.*") {
@@ -304,7 +304,7 @@ function Get-LocalLanIP {
         }
     }
     
-    # 如果没有找到常见网段，返回第一个有效IP
+    # If no common subnet found, return first valid IP
     if ($networkAdapters.Count -gt 0) {
         return $networkAdapters[0].IPAddress
     }
@@ -316,23 +316,23 @@ $LocalIP = Get-LocalLanIP
 Write-Host "Detected local LAN IP: $LocalIP" -ForegroundColor Cyan
 
 Invoke-InDirectory -Path $FrontendPath -ScriptBlock {
-    # 生成前端 .env 文件（每次都重新生成以确保IP正确）
+    # Generate frontend .env file (regenerate each time to ensure correct IP)
     $envFile = Join-Path (Get-Location) ".env"
     
     Write-Host "Generating frontend .env with LAN IP: $LocalIP" -ForegroundColor Yellow
     
     $envContent = @"
-# API配置 - 自动生成，使用本机局域网IP
+# API Configuration - Auto generated with local LAN IP
 # Generated at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 # Local IP: $LocalIP
 VITE_API_BASE_URL=http://${LocalIP}:3000/api
 VITE_WS_URL=http://${LocalIP}:3000
 
-# 应用配置
-VITE_APP_TITLE=AI文字交互式游戏
+# App Configuration
+VITE_APP_TITLE=AI Interactive Game
 VITE_APP_VERSION=1.0.0
 
-# 功能开关
+# Feature Flags
 VITE_ENABLE_DEVTOOLS=true
 VITE_ENABLE_MOCK=false
 "@
@@ -340,7 +340,7 @@ VITE_ENABLE_MOCK=false
     $envContent | Out-File -FilePath $envFile -Encoding UTF8 -Force
     Write-Host "Frontend .env created with IP: $LocalIP" -ForegroundColor Green
     
-    # 安装前端依赖
+    # Install frontend dependencies
     if (-not (Test-Path "node_modules")) {
         Write-Host "frontend node_modules not found, running npm install ..." -ForegroundColor Yellow
         npm install --no-audit --no-fund

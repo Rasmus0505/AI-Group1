@@ -9,6 +9,17 @@ import { logger } from '../utils/logger';
 import { io } from '../server';
 import { AppError } from '../middleware/errorHandler';
 
+/**
+ * 获取房间配置的决策时限（分钟）
+ */
+async function getDecisionTimeLimit(roomId: string): Promise<number> {
+  const hostConfig = await prisma.hostConfig.findUnique({
+    where: { roomId },
+    select: { decisionTimeLimit: true },
+  });
+  return hostConfig?.decisionTimeLimit || 4; // 默认 4 分钟
+}
+
 export interface GameRecoveryState {
   sessionId: string;
   currentRound: number;
@@ -261,7 +272,8 @@ export class GameRecoveryService {
 
       // 更新到下一回合
       const nextRound = session.currentRound + 1;
-      const newDeadline = new Date(Date.now() + 5 * 60 * 1000); // 5分钟后
+      const decisionMinutes = await getDecisionTimeLimit(session.roomId);
+      const newDeadline = new Date(Date.now() + decisionMinutes * 60 * 1000);
 
       await prisma.gameSession.update({
         where: { id: sessionId },
@@ -363,7 +375,8 @@ export class GameRecoveryService {
       }
 
       const nextRound = session.currentRound + 1;
-      const newDeadline = new Date(Date.now() + 5 * 60 * 1000);
+      const decisionMinutes = await getDecisionTimeLimit(session.roomId);
+      const newDeadline = new Date(Date.now() + decisionMinutes * 60 * 1000);
 
       // 创建默认的推演结果
       const defaultResult = {
@@ -418,7 +431,18 @@ export class GameRecoveryService {
    */
   private async resetToDecisionPhase(sessionId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const newDeadline = new Date(Date.now() + 5 * 60 * 1000);
+      // 先获取 session 以获取 roomId
+      const existingSession = await prisma.gameSession.findUnique({
+        where: { id: sessionId },
+        select: { roomId: true },
+      });
+      
+      if (!existingSession) {
+        throw new Error('游戏会话不存在');
+      }
+
+      const decisionMinutes = await getDecisionTimeLimit(existingSession.roomId);
+      const newDeadline = new Date(Date.now() + decisionMinutes * 60 * 1000);
 
       const session = await prisma.gameSession.update({
         where: { id: sessionId },

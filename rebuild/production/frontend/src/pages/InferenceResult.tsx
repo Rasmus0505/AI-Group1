@@ -632,9 +632,34 @@ function InferenceResultPage() {
         completedAt: new Date().toISOString(),
       });
     };
+    
+    // 游戏终止事件：主持人终止游戏后，玩家自动返回房间
+    const handleGameFinished = (payload: any) => {
+      // 检查是否是当前会话的终止事件
+      if (payload.sessionId === sessionId || (roomId && payload.roomId === roomId)) {
+        const reason = payload.reason;
+        if (reason === 'terminated_by_host') {
+          message.warning('主持人已终止游戏，正在返回房间...');
+        } else if (reason === 'reset_by_host') {
+          message.warning('主持人已重置房间，正在返回房间...');
+        } else {
+          message.info('游戏已结束，正在返回房间...');
+        }
+        // 延迟一小段时间让用户看到提示，然后跳转
+        setTimeout(() => {
+          if (roomId) {
+            navigate(`/rooms/${roomId}/waiting`);
+          } else {
+            navigate('/rooms');
+          }
+        }, 1500);
+      }
+    };
+    
     wsService.on('inference_progress', handleProgress);
     wsService.on('inference_completed', handleCompleted);
     wsService.on('inference_failed', handleFailed);
+    wsService.on('game_finished', handleGameFinished);
     return () => {
       // 离开房间
       if (roomId) {
@@ -643,8 +668,9 @@ function InferenceResultPage() {
       wsService.off('inference_progress', handleProgress);
       wsService.off('inference_completed', handleCompleted);
       wsService.off('inference_failed', handleFailed);
+      wsService.off('game_finished', handleGameFinished);
     };
-  }, [sessionId, round, roomId]);
+  }, [sessionId, round, roomId, navigate]);
 
   return (
     <div className="min-h-screen p-8 text-slate-200 relative overflow-hidden">

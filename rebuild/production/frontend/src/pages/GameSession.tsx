@@ -337,12 +337,36 @@ function GameSessionPage() {
       }
     };
 
+    // 游戏终止事件：主持人终止游戏后，玩家自动返回房间
+    const handleGameFinished = (payload: any) => {
+      // 检查是否是当前会话的终止事件
+      if (payload.sessionId === sessionId || (session?.roomId && payload.roomId === session.roomId)) {
+        const reason = payload.reason;
+        if (reason === 'terminated_by_host') {
+          message.warning('主持人已终止游戏，正在返回房间...');
+        } else if (reason === 'reset_by_host') {
+          message.warning('主持人已重置房间，正在返回房间...');
+        } else {
+          message.info('游戏已结束，正在返回房间...');
+        }
+        // 延迟一小段时间让用户看到提示，然后跳转
+        setTimeout(() => {
+          if (session?.roomId) {
+            navigate(`/rooms/${session.roomId}/waiting`);
+          } else {
+            navigate('/rooms');
+          }
+        }, 1500);
+      }
+    };
+
     wsService.on('decision_status_update', handleDecisionStatusUpdate);
     wsService.on('game_state_update', handleGameStateUpdate);
     wsService.on('achievement_unlocked', handleAchievementUnlocked);
     wsService.on('time_limit_adjusted', handleTimeLimitAdjusted);
     wsService.on('inference_completed', handleInferenceCompleted);
     wsService.on('inference_progress', handleInferenceProgress);
+    wsService.on('game_finished', handleGameFinished);
 
     return () => {
       wsService.setActiveSession(null);
@@ -356,6 +380,7 @@ function GameSessionPage() {
       wsService.off('time_limit_adjusted', handleTimeLimitAdjusted);
       wsService.off('inference_completed', handleInferenceCompleted);
       wsService.off('inference_progress', handleInferenceProgress);
+      wsService.off('game_finished', handleGameFinished);
     };
   }, [sessionId, session?.roomId, loadDecisions, loadTurnResult, navigate, handleAchievementUnlock, loadSession]);
 

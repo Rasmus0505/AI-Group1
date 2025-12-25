@@ -274,9 +274,51 @@ router.post('/:roomId/start', authenticateToken, async (req: AuthRequest, res, n
           gameState: initialGameState as any, // 写入初始化数据
         },
       });
+    } else if (session.status === 'finished') {
+      // 游戏已结束，重新开始新游戏
+      // 1. 清理旧的推演结果（Redis）
+      const oldSessionId = session.id;
+      for (let round = 1; round <= session.currentRound; round++) {
+        const resultKey = `inference:result:${oldSessionId}:${round}`;
+        const progressKey = `inference:progress:${oldSessionId}:${round}`;
+        await redis.del(resultKey);
+        await redis.del(progressKey);
+      }
+      
+      // 2. 清理旧的玩家决策
+      await prisma.playerAction.deleteMany({
+        where: { sessionId: oldSessionId },
+      });
+      
+      // 3. 清理旧的临时事件
+      await prisma.temporaryEvent.deleteMany({
+        where: { sessionId: oldSessionId },
+      });
+
+      // 4. 清理 AI 对话历史
+      await prisma.aIConversationHistory.deleteMany({
+        where: { sessionId: oldSessionId },
+      });
+
+      // 5. 重置会话状态，重新开始
+      session = await prisma.gameSession.update({
+        where: { id: session.id },
+        data: {
+          currentRound: 1,
+          roundStatus: 'decision',
+          status: 'playing',
+          decisionDeadline: deadline,
+          gameState: initialGameState as any, // 重新写入初始化数据
+          updatedAt: now,
+        },
+      });
+
+      logger.info(`Game restarted for room ${roomId}`, {
+        sessionId: session.id,
+        previousRound: session.currentRound,
+      });
     } else if (session.status !== 'playing') {
-      // 重新开始或继续游戏时，重置到决策阶段
-      // 如果 gameState 为空，则写入初始化数据
+      // 暂停状态，继续游戏
       session = await prisma.gameSession.update({
         where: { id: session.id },
         data: {

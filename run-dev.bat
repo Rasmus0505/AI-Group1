@@ -29,7 +29,8 @@ echo [INFO] Starting PowerShell script...
 echo.
 
 REM Use PowerShell to execute script with error handling
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $ErrorActionPreference = 'Stop'; try { & '%~dp0tools\run-dev.ps1' } catch { Write-Host \"[ERROR] Script execution failed: $_\" -ForegroundColor Red; exit 1 } }"
+REM Use -File instead of -Command for better compatibility
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\run-dev.ps1"
 
 set EXIT_CODE=%ERRORLEVEL%
 
