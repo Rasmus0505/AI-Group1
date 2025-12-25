@@ -708,6 +708,12 @@ router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, 
       },
     });
 
+    // 同步更新房间的 maxPlayers
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { maxPlayers: total },
+    });
+
     res.json({ code: 200, message: '主持人配置已保存', data: toHostConfigResponse(updated) });
   } catch (error) {
     next(error);
@@ -827,6 +833,12 @@ router.post(
           validationStatus: 'pending',
           validationMessage: null,
         },
+      });
+
+      // 同步更新房间的 maxPlayers
+      await prisma.room.update({
+        where: { id: roomId },
+        data: { maxPlayers: total },
       });
 
       res.json({ code: 200, message: '玩家配置已更新', data: toHostConfigResponse(updated) });
