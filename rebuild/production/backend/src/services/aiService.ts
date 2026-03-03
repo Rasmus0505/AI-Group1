@@ -62,6 +62,7 @@ export interface AIConfig {
   endpoint?: string | null;
   headers?: Record<string, unknown> | null;
   bodyTemplate?: Record<string, unknown> | null;
+  useJsonSchema?: boolean | null;
 }
 
 export interface InferenceRequest {
@@ -129,6 +130,12 @@ export interface InferenceResult {
   status: 'completed' | 'failed';
   error?: string;
   completedAt: Date;
+}
+
+interface CallAIOptions {
+  useJsonSchema?: boolean;
+  jsonSchemaName?: string;
+  jsonSchema?: Record<string, unknown>;
 }
 
 export class AIService {
@@ -854,6 +861,7 @@ export class AIService {
     prompt += '   - 每个主体的选项应该反映其独特的处境、资源状况和战略机会\n';
     prompt += '   - 选项ID格式为"主体ID+序号"，如A1、A2、A3、B1、B2、B3\n';
     prompt += '8. 主体 id 使用 A/B/C/D，不要使用 emoji\n';
+    prompt += '9. **perEntityPanel.delta 是权威结算依据**，请输出变化量；cash/attributes 绝对值仅作展示参考\n';
 
     logger.info(`Prompt built successfully`, {
       promptLength: prompt.length,
@@ -870,10 +878,143 @@ export class AIService {
   /**
    * 根据配置构建请求体（支持历史消息）
    */
+  private supportsJsonSchema(provider: string | null | undefined): boolean {
+    const normalized = (provider || 'default').toLowerCase();
+    return normalized === 'openai' || normalized === 'zhipu';
+  }
+
+  private applyJsonSchemaToRequestBody(
+    requestBody: Record<string, unknown>,
+    config: AIConfig,
+    options?: CallAIOptions
+  ): Record<string, unknown> {
+    const shouldUseJsonSchema = options?.useJsonSchema ?? Boolean(config.useJsonSchema);
+    if (!shouldUseJsonSchema) return requestBody;
+    if (!this.supportsJsonSchema(config.provider)) return requestBody;
+
+    const schema = options?.jsonSchema || this.buildInferenceJsonSchema();
+    const schemaName = options?.jsonSchemaName || 'game_inference_response';
+
+    return {
+      ...requestBody,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: schemaName,
+          strict: true,
+          schema,
+        },
+      },
+    };
+  }
+
+  private buildInferenceJsonSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      additionalProperties: true,
+      required: ['narrative', 'events', 'perEntityPanel', 'nextRoundHints'],
+      properties: {
+        narrative: { type: 'string' },
+        nextRoundHints: { type: 'string' },
+        events: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+        perEntityPanel: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'name', 'delta'],
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              delta: {
+                type: 'object',
+                additionalProperties: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private buildDecisionOptionsJsonSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      additionalProperties: true,
+      required: ['options'],
+      properties: {
+        options: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 4,
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['option_id', 'text', 'expected_effect', 'category'],
+            properties: {
+              option_id: { type: 'string' },
+              text: { type: 'string' },
+              expected_effect: { type: 'string' },
+              category: {
+                type: 'string',
+                enum: ['attack', 'defense', 'cooperation', 'explore', 'trade'],
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  private buildInitJsonSchema(): Record<string, unknown> {
+    return {
+      type: 'object',
+      additionalProperties: true,
+      required: ['backgroundStory', 'entities', 'yearlyHexagram', 'initialOptions', 'cashFormula'],
+      properties: {
+        backgroundStory: { type: 'string' },
+        cashFormula: { type: 'string' },
+        entities: {
+          type: 'array',
+          minItems: 2,
+          items: {
+            type: 'object',
+            additionalProperties: true,
+            required: ['id', 'name', 'cash'],
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              cash: { type: 'number' },
+            },
+          },
+        },
+        yearlyHexagram: {
+          type: 'object',
+          additionalProperties: true,
+        },
+        initialOptions: {
+          type: 'array',
+          minItems: 3,
+          items: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+      },
+    };
+  }
+
   buildRequestBody(
     config: AIConfig,
     prompt: string,
-    historyMessages: ConversationMessage[] = []
+    historyMessages: ConversationMessage[] = [],
+    options?: CallAIOptions
   ): Record<string, unknown> {
     const { bodyTemplate } = config;
 
@@ -947,7 +1088,7 @@ export class AIService {
           requestBodyPreview: JSON.stringify(result).substring(0, 500),
         });
 
-        return result;
+        return this.applyJsonSchemaToRequestBody(result, config, options);
       } catch (error: any) {
         logger.error(`Failed to process bodyTemplate`, {
           error: error.message,
@@ -975,12 +1116,13 @@ export class AIService {
       },
     ];
 
-    return {
+    const defaultRequestBody = {
       model: 'gpt-3.5-turbo',
       messages,
       temperature: 0.7,
       max_tokens: 8000,
     };
+    return this.applyJsonSchemaToRequestBody(defaultRequestBody, config, options);
   }
 
   /**
@@ -991,14 +1133,15 @@ export class AIService {
     prompt: string,
     retries = this.defaultRetries,
     timeout?: number,
-    historyMessages: ConversationMessage[] = []
+    historyMessages: ConversationMessage[] = [],
+    options?: CallAIOptions
   ): Promise<InferenceResult['result']> {
     if (!config.endpoint) {
       throw new Error('AI API endpoint not configured');
     }
 
     // 构建请求体（包含历史消息）
-    let requestBody = this.buildRequestBody(config, prompt, historyMessages);
+    let requestBody = this.buildRequestBody(config, prompt, historyMessages, options);
     logger.info(`Prepared request body for AI API call`, {
       endpoint: config.endpoint,
       provider: config.provider,
@@ -1182,7 +1325,7 @@ export class AIService {
 
     // OpenAI/DeepSeek格式：{ choices: [{ message: { content: "..." } }] }
     // DeepSeek API 使用与 OpenAI 兼容的格式
-    if (provider === 'openai' || provider === 'deepseek' || provider === 'default') {
+    if (provider === 'openai' || provider === 'deepseek' || provider === 'zhipu' || provider === 'default') {
       if (obj.choices && Array.isArray(obj.choices) && obj.choices.length > 0) {
         const choice = obj.choices[0] as Record<string, unknown>;
         if (choice.message && typeof choice.message === 'object') {
@@ -1374,7 +1517,18 @@ export class AIService {
     });
 
     // 调用 AI（带历史消息）
-    const result = await this.callAI(config, prompt, this.defaultRetries, undefined, historyMessages);
+    const result = await this.callAI(
+      config,
+      prompt,
+      this.defaultRetries,
+      undefined,
+      historyMessages,
+      {
+        useJsonSchema: Boolean(config.useJsonSchema),
+        jsonSchemaName: 'game_inference_response',
+        jsonSchema: this.buildInferenceJsonSchema(),
+      }
+    );
 
     // 保存本回合的对话历史
     const currentRoundMessages: ConversationMessage[] = [
@@ -1507,7 +1661,11 @@ export class AIService {
       });
 
       // Call AI API
-      const result = await this.callAI(config, prompt);
+      const result = await this.callAI(config, prompt, this.defaultRetries, undefined, [], {
+        useJsonSchema: Boolean(config.useJsonSchema),
+        jsonSchemaName: 'decision_options_response',
+        jsonSchema: this.buildDecisionOptionsJsonSchema(),
+      });
 
       // Parse the narrative/result to extract JSON
       let optionsArray: Array<{
@@ -1668,7 +1826,18 @@ export class AIService {
         initialCash: initConfig.initialCash,
       });
 
-      const result = await this.callAI(config, prompt, this.defaultRetries, this.initTimeout);
+      const result = await this.callAI(
+        config,
+        prompt,
+        this.defaultRetries,
+        this.initTimeout,
+        [],
+        {
+          useJsonSchema: Boolean(config.useJsonSchema),
+          jsonSchemaName: 'game_init_response',
+          jsonSchema: this.buildInitJsonSchema(),
+        }
+      );
 
       // 解析结果
       if (result.narrative) {
@@ -1771,4 +1940,3 @@ export class AIService {
 }
 
 export const aiService = AIService.getInstance();
-

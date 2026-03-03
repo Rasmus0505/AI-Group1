@@ -126,7 +126,7 @@ router.post(
       }
 
       // 设置过期任务（Redis）
-      const expireKey = `trade: expire:${trade.id} `;
+      const expireKey = `trade:expire:${trade.id}`;
       await redis.setex(
         expireKey,
         expiresInMinutes * 60,
@@ -254,7 +254,7 @@ router.post(
       });
 
       // 删除过期任务
-      await redis.del(`trade: expire:${tradeId} `);
+      await redis.del(`trade:expire:${tradeId}`);
 
       // 发送WebSocket通知
       const { io } = require('../server');
@@ -433,7 +433,7 @@ router.delete(
       });
 
       // 删除过期任务
-      await redis.del(`trade: expire:${tradeId} `);
+      await redis.del(`trade:expire:${tradeId}`);
 
       // 发送WebSocket通知
       const { io } = require('../server');

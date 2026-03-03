@@ -37,6 +37,119 @@ const ensureRoomHost = async (roomId: string, userId: string) => {
   return room;
 };
 
+type TimeoutStrategy = 'auto_submit' | 'auto_skip' | 'bot_takeover';
+
+const normalizeTimeoutStrategy = (strategy: string | null | undefined): TimeoutStrategy => {
+  const normalized = (strategy || '').toLowerCase();
+  if (normalized === 'auto_skip' || normalized === 'bot_takeover' || normalized === 'auto_submit') {
+    return normalized;
+  }
+  return 'auto_submit';
+};
+
+const buildTimeoutActionText = (strategy: TimeoutStrategy): string => {
+  if (strategy === 'bot_takeover') {
+    return '系统托管：执行保守经营策略（自动生成）';
+  }
+  return '系统流转：本回合无动作（超时自动跳过）';
+};
+
+const emitReviewStage = (roomId: string, sessionId: string, round: number, decisionDeadline: Date | null) => {
+  io.to(roomId).emit('round_stage_changed', {
+    sessionId,
+    round,
+    stage: 'review',
+  });
+
+  io.to(roomId).emit('game_state_update', {
+    roomId,
+    sessionId,
+    currentRound: round,
+    roundStatus: 'review',
+    decisionDeadline,
+    status: 'playing',
+  });
+
+  io.to(roomId).emit('stage_changed', {
+    sessionId,
+    round,
+    stage: 'review',
+    previousStage: 'decision',
+  });
+};
+
+const applyTimeoutStrategy = async (
+  sessionId: string,
+  roomId: string,
+  round: number,
+  strategy: TimeoutStrategy
+) => {
+  if (strategy === 'auto_submit') {
+    return { strategy, created: 0, updated: 0 };
+  }
+
+  const roomPlayers = await prisma.roomPlayer.findMany({
+    where: {
+      roomId,
+      status: { not: 'left' },
+      playerIndex: { not: null },
+    },
+    orderBy: { playerIndex: 'asc' },
+  });
+
+  let created = 0;
+  let updated = 0;
+  const actionText = buildTimeoutActionText(strategy);
+
+  for (const player of roomPlayers) {
+    const existingAction = await prisma.playerAction.findFirst({
+      where: {
+        sessionId,
+        userId: player.userId,
+        round,
+      },
+    });
+
+    if (existingAction && existingAction.status === 'submitted') {
+      continue;
+    }
+
+    const timeoutPayload = {
+      actionText,
+      actionType: 'system_auto',
+      actionData: {
+        source: 'timeout',
+        strategy,
+      } as any,
+      selectedOptionIds: [] as any,
+      status: 'submitted',
+      submittedAt: new Date(),
+    };
+
+    if (existingAction) {
+      await prisma.playerAction.update({
+        where: { id: existingAction.id },
+        data: timeoutPayload,
+      });
+      updated += 1;
+      continue;
+    }
+
+    await prisma.playerAction.create({
+      data: {
+        sessionId,
+        userId: player.userId,
+        playerIndex: player.playerIndex ?? 0,
+        round,
+        ...timeoutPayload,
+      },
+    });
+    created += 1;
+  }
+
+  return { strategy, created, updated };
+};
+
 /**
  * POST /api/game/:roomId/generate-init
  * 生成游戏初始化数据（AI生成背景故事、主体状态、卦象等）
@@ -67,6 +180,7 @@ router.post('/:roomId/generate-init', authenticateToken, async (req: AuthRequest
       endpoint: hostConfig.apiEndpoint || null,
       headers: (hostConfig.apiHeaders as Record<string, unknown>) || null,
       bodyTemplate: (hostConfig.apiBodyTemplate as Record<string, unknown>) || null,
+      useJsonSchema: hostConfig.useJsonSchema,
     };
 
     logger.info(`Generating game init for room ${roomId}`, {
@@ -990,6 +1104,7 @@ router.get(
         endpoint: hostConfig.apiEndpoint || null,
         headers: (hostConfig.apiHeaders as Record<string, unknown>) || null,
         bodyTemplate: (hostConfig.apiBodyTemplate as Record<string, unknown>) || null,
+        useJsonSchema: hostConfig.useJsonSchema,
       };
 
       // Generate options
@@ -1189,6 +1304,25 @@ router.post('/:sessionId/start-review', authenticateToken, async (req: AuthReque
       throw new AppError(`当前阶段是 ${session.roundStatus}，无法进入审核阶段`, 400);
     }
 
+    const now = new Date();
+    const hostConfig = await prisma.hostConfig.findUnique({
+      where: { roomId: session.roomId },
+      select: { timeoutStrategy: true },
+    });
+
+    const timeoutStrategy = normalizeTimeoutStrategy(hostConfig?.timeoutStrategy);
+    const isTimedOut = !!(session.decisionDeadline && now > session.decisionDeadline);
+    let timeoutFallback: { strategy: TimeoutStrategy; created: number; updated: number } | null = null;
+
+    if (isTimedOut && timeoutStrategy !== 'auto_submit') {
+      timeoutFallback = await applyTimeoutStrategy(
+        session.id,
+        session.roomId,
+        session.currentRound,
+        timeoutStrategy
+      );
+    }
+
     // 更新为 review 阶段
     await prisma.gameSession.update({
       where: { id: sessionId },
@@ -1197,34 +1331,25 @@ router.post('/:sessionId/start-review', authenticateToken, async (req: AuthReque
       },
     });
 
-    // 广播阶段切换通知
-    io.to(session.roomId).emit('round_stage_changed', {
-      sessionId,
-      round: session.currentRound,
-      stage: 'review',
-    });
+    emitReviewStage(session.roomId, sessionId, session.currentRound, session.decisionDeadline);
 
-    // 同步游戏状态给所有客户端（玩家页面依赖 game_state_update）
-    io.to(session.roomId).emit('game_state_update', {
-      roomId: session.roomId,
-      sessionId,
-      currentRound: session.currentRound,
-      roundStatus: 'review',
-      decisionDeadline: session.decisionDeadline,
-      status: session.status,
-    });
-
-    io.to(session.roomId).emit('stage_changed', {
-      sessionId,
-      round: session.currentRound,
-      stage: 'review',
-      previousStage: 'decision',
-    });
+    if (timeoutFallback && (timeoutFallback.created > 0 || timeoutFallback.updated > 0)) {
+      io.to(session.roomId).emit('decision_status_update', {
+        sessionId,
+        round: session.currentRound,
+        status: 'submitted',
+        source: 'timeout_strategy',
+        strategy: timeoutFallback.strategy,
+      });
+    }
 
     logger.info(`Game session ${sessionId} entered review phase`, {
       sessionId,
       round: session.currentRound,
       userId,
+      timeoutStrategy,
+      isTimedOut,
+      timeoutFallback,
     });
 
     res.json({
@@ -1234,12 +1359,103 @@ router.post('/:sessionId/start-review', authenticateToken, async (req: AuthReque
         sessionId,
         round: session.currentRound,
         roundStatus: 'review',
+        timeoutFallback,
       },
     });
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * POST /api/game/:sessionId/round/:round/apply-timeout-strategy
+ * 决策超时时主持人一键流转：auto_skip / bot_takeover
+ */
+router.post(
+  '/:sessionId/round/:round/apply-timeout-strategy',
+  authenticateToken,
+  async (req: AuthRequest, res, next) => {
+    try {
+      const userId = req.userId;
+      const { sessionId, round } = req.params;
+      if (!userId) throw new AppError('Unauthorized', 401);
+
+      const roundNumber = Number(round);
+      if (!Number.isFinite(roundNumber) || roundNumber <= 0) {
+        throw new AppError('无效的回合号', 400);
+      }
+
+      const session = await prisma.gameSession.findUnique({
+        where: { id: sessionId },
+        include: { room: true },
+      });
+      if (!session) throw new AppError('游戏会话不存在', 404);
+
+      await ensureRoomHost(session.roomId, userId);
+
+      if (session.currentRound !== roundNumber) {
+        throw new AppError('只能对当前回合执行超时流转', 400);
+      }
+
+      if (session.roundStatus !== 'decision' && session.roundStatus !== 'review') {
+        throw new AppError('当前阶段不支持超时流转', 400);
+      }
+
+      const now = new Date();
+      const isTimedOut = !!(session.decisionDeadline && now > session.decisionDeadline);
+      if (!isTimedOut) {
+        throw new AppError('当前回合未超时，无需执行超时流转', 400);
+      }
+
+      const hostConfig = await prisma.hostConfig.findUnique({
+        where: { roomId: session.roomId },
+        select: { timeoutStrategy: true },
+      });
+
+      const timeoutStrategy = normalizeTimeoutStrategy(hostConfig?.timeoutStrategy);
+      const fallbackResult = await applyTimeoutStrategy(
+        session.id,
+        session.roomId,
+        session.currentRound,
+        timeoutStrategy
+      );
+
+      let newRoundStatus = session.roundStatus;
+      if (session.roundStatus === 'decision') {
+        await prisma.gameSession.update({
+          where: { id: session.id },
+          data: { roundStatus: 'review' },
+        });
+        emitReviewStage(session.roomId, session.id, session.currentRound, session.decisionDeadline);
+        newRoundStatus = 'review';
+      }
+
+      if (fallbackResult.created > 0 || fallbackResult.updated > 0) {
+        io.to(session.roomId).emit('decision_status_update', {
+          sessionId: session.id,
+          round: session.currentRound,
+          status: 'submitted',
+          source: 'timeout_strategy',
+          strategy: fallbackResult.strategy,
+        });
+      }
+
+      res.json({
+        code: 200,
+        message: '超时流转已执行',
+        data: {
+          sessionId: session.id,
+          round: session.currentRound,
+          roundStatus: newRoundStatus,
+          timedOut: isTimedOut,
+          fallback: fallbackResult,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 /**
  * GET /api/game/:sessionId/round/:round/decisions
@@ -1710,6 +1926,7 @@ router.post(
         bodyTemplate: (hostConfig.apiBodyTemplate && typeof hostConfig.apiBodyTemplate === 'object')
           ? (hostConfig.apiBodyTemplate as Record<string, unknown>)
           : null,
+        useJsonSchema: hostConfig.useJsonSchema,
       };
 
       // 验证配置完整性
@@ -1852,6 +2069,7 @@ async function performInferenceAsync(
     endpoint?: string | null;
     headers?: Record<string, unknown> | null;
     bodyTemplate?: Record<string, unknown> | null;
+    useJsonSchema?: boolean | null;
   }
 ): Promise<void> {
   try {
@@ -1868,6 +2086,15 @@ async function performInferenceAsync(
     if (!aiConfig.endpoint) {
       throw new Error('AI API endpoint not configured');
     }
+
+    const sessionSnapshot = await prisma.gameSession.findUnique({
+      where: { id: sessionId },
+      select: { gameState: true },
+    });
+    const baselineGameState =
+      sessionSnapshot && sessionSnapshot.gameState && typeof sessionSnapshot.gameState === 'object'
+        ? (sessionSnapshot.gameState as Record<string, unknown>)
+        : null;
 
     // 验证决策数据
     if (!inferenceData.decisions || inferenceData.decisions.length === 0) {
@@ -1895,7 +2122,8 @@ async function performInferenceAsync(
     });
 
     // 将 AI 原始结果转换为前端 TurnResultDTO（最小可用版本）。
-    const uiTurnResult = buildTurnResultDTO(result as any, inferenceData);
+    const uiTurnResult = buildTurnResultDTO(result as any, inferenceData, baselineGameState);
+    const nextGameState = buildNextGameState(baselineGameState, uiTurnResult, round);
 
     const enhancedResult: any = {
       ...(result as any),
@@ -1926,7 +2154,7 @@ async function performInferenceAsync(
       where: { id: sessionId },
       data: {
         roundStatus: 'result',
-        gameState: enhancedResult as any, // 保存推演结果到gameState
+        gameState: nextGameState as any,
       },
       include: {
         room: {
@@ -2013,7 +2241,7 @@ async function performInferenceAsync(
     io.to(roomId).emit('inference_completed', {
       sessionId,
       round,
-      result,
+      result: enhancedResult,
     });
 
     // 同步游戏状态到 result 阶段（玩家端有的只监听 game_state_update）
@@ -2099,7 +2327,8 @@ async function performInferenceAsync(
  */
 function buildTurnResultDTO(
   result: any,
-  inferenceData: InferenceRequest
+  inferenceData: InferenceRequest,
+  baselineGameState?: Record<string, unknown> | null
 ): {
   narrative: string;
   events: Array<{
@@ -2114,6 +2343,7 @@ function buildTurnResultDTO(
     id: string;
     name: string;
     cash: number;
+    attributes: Record<string, number>;
     marketShare?: number;
     reputation?: number;
     innovation?: number;
@@ -2168,29 +2398,82 @@ function buildTurnResultDTO(
     severity: 'warning' | 'critical';
   }>;
 } {
-  // 如果已经是符合契约的结构，直接返回
-  if (result && result.narrative && Array.isArray(result.perEntityPanel)) {
-    return {
-      narrative: result.narrative,
-      events: result.events || [],
-      redactedSegments: result.redactedSegments || [],
-      perEntityPanel: result.perEntityPanel || [],
-      leaderboard: result.leaderboard || [],
-      riskCard: result.riskCard || '',
-      opportunityCard: result.opportunityCard || '',
-      benefitCard: result.benefitCard || '',
-      achievements: result.achievements || [],
-      hexagram: result.hexagram,
-      options: result.options,
-      ledger: result.ledger,
-      branchingNarratives: result.branchingNarratives,
-      nextRoundHints: result.nextRoundHints || '',
-      roundTitle: result.roundTitle,
-      cashFlowWarning: result.cashFlowWarning,
-    };
+  const narrative = result?.narrative || '';
+
+  const baselineEntities = extractEntityStateFromGameState(baselineGameState, inferenceData);
+
+  const perEntityPanelSource = Array.isArray(result?.perEntityPanel)
+    ? result.perEntityPanel
+    : normalizeOutcomesToEntityPanels(result?.outcomes, inferenceData);
+
+  const aiPanelById = new Map<string, any>();
+  if (Array.isArray(perEntityPanelSource)) {
+    for (const panel of perEntityPanelSource) {
+      if (!panel || typeof panel !== 'object') continue;
+      const rawId = (panel as Record<string, unknown>).id;
+      if (rawId === undefined || rawId === null) continue;
+      aiPanelById.set(String(rawId).toLowerCase(), panel);
+    }
   }
 
-  const narrative = result?.narrative || '';
+  const perEntityPanel = baselineEntities.map((baseEntity, index) => {
+    const matchedPanel =
+      aiPanelById.get(baseEntity.id.toLowerCase()) ||
+      (Array.isArray(perEntityPanelSource) ? perEntityPanelSource[index] : null);
+
+    const normalizedDelta = normalizeEntityDelta(matchedPanel, baseEntity);
+    const settledAttributes: Record<string, number> = { ...baseEntity.attributes };
+    for (const [deltaKey, deltaValue] of Object.entries(normalizedDelta)) {
+      if (deltaKey === 'cash' || deltaKey === 'passiveIncome' || deltaKey === 'passiveExpense') {
+        continue;
+      }
+      const prevValue = toFiniteNumber(settledAttributes[deltaKey], 0);
+      settledAttributes[deltaKey] = roundNumber(prevValue + deltaValue);
+    }
+
+    const settledCash = Math.max(0, roundNumber(baseEntity.cash + (normalizedDelta.cash || 0)));
+    const settledPassiveIncome = Math.max(
+      0,
+      roundNumber(baseEntity.passiveIncome + (normalizedDelta.passiveIncome || 0))
+    );
+    const settledPassiveExpense = Math.max(
+      0,
+      roundNumber(baseEntity.passiveExpense + (normalizedDelta.passiveExpense || 0))
+    );
+
+    const settledMarketShare = pickMetricValue(
+      settledAttributes,
+      matchedPanel,
+      ['marketShare', '市场份额']
+    );
+    const settledReputation = pickMetricValue(
+      settledAttributes,
+      matchedPanel,
+      ['reputation', '品牌声誉']
+    );
+    const settledInnovation = pickMetricValue(
+      settledAttributes,
+      matchedPanel,
+      ['innovation', '创新能力']
+    );
+
+    return {
+      id: baseEntity.id,
+      name: baseEntity.name,
+      cash: settledCash,
+      attributes: settledAttributes,
+      marketShare: settledMarketShare,
+      reputation: settledReputation,
+      innovation: settledInnovation,
+      passiveIncome: settledPassiveIncome,
+      passiveExpense: settledPassiveExpense,
+      delta: normalizedDelta,
+      broken: settledCash <= 0 || Boolean(matchedPanel?.broken),
+      achievementsUnlocked: Array.isArray(matchedPanel?.achievementsUnlocked)
+        ? matchedPanel.achievementsUnlocked.map((item: unknown) => String(item))
+        : [],
+    };
+  });
 
   // 事件映射：尽量从旧结构提取 keyword/resource/newValue
   const eventsRaw = Array.isArray(result?.events) ? result.events : [];
@@ -2220,50 +2503,6 @@ function buildTurnResultDTO(
       };
     })
     .slice(0, 10);
-
-  // 主体面板映射：从 outcomes/resources 补齐现金等核心字段
-  const outcomesRaw = Array.isArray(result?.outcomes) ? result.outcomes : [];
-  const perEntityPanel = outcomesRaw.map((o: any) => {
-    const playerIndex = o.playerIndex ?? o.player_id ?? o.id ?? 'P';
-    const decision = inferenceData.decisions?.find(
-      d => d.playerIndex === o.playerIndex
-    );
-    const name =
-      decision?.nickname ||
-      decision?.username ||
-      `玩家 ${playerIndex ?? ''}`.trim();
-    const resources = (o.resources || {}) as Record<string, any>;
-    const cash = Number(resources.cash ?? resources.money ?? 0) || 0;
-    const marketShare =
-      resources.marketShare !== undefined
-        ? Number(resources.marketShare) || 0
-        : undefined;
-    const reputation =
-      resources.reputation !== undefined
-        ? Number(resources.reputation) || 0
-        : undefined;
-    const innovation =
-      resources.innovation !== undefined
-        ? Number(resources.innovation) || 0
-        : undefined;
-
-    return {
-      id: String(playerIndex),
-      name,
-      cash,
-      marketShare,
-      reputation,
-      innovation,
-      passiveIncome: Number(resources.passiveIncome ?? 0) || 0,
-      passiveExpense: Number(resources.passiveExpense ?? 0) || 0,
-      delta: {},
-      broken: false,
-      achievementsUnlocked: [],
-      creditRating: resources.creditRating,
-      paletteKey: resources.paletteKey,
-      accentColor: resources.accentColor,
-    };
-  });
 
   // 排行榜：基于现金和市场份额的简易得分
   const leaderboard = perEntityPanel
@@ -2300,6 +2539,228 @@ function buildTurnResultDTO(
     nextRoundHints: result?.nextRoundHints || result?.hints || '',
     roundTitle: result?.roundTitle,
     cashFlowWarning: result?.cashFlowWarning,
+  };
+}
+
+function extractEntityStateFromGameState(
+  baselineGameState: Record<string, unknown> | null | undefined,
+  inferenceData: InferenceRequest
+): Array<{
+  id: string;
+  name: string;
+  cash: number;
+  attributes: Record<string, number>;
+  passiveIncome: number;
+  passiveExpense: number;
+}> {
+  const fromPlayers = Array.isArray(baselineGameState?.players)
+    ? baselineGameState?.players
+    : [];
+  const fromEntities = Array.isArray(baselineGameState?.entities)
+    ? baselineGameState?.entities
+    : [];
+  const source = fromPlayers.length > 0 ? fromPlayers : fromEntities;
+
+  if (source.length > 0) {
+    return source.map((item, index) => {
+      const record = item as Record<string, unknown>;
+      const fallbackId = indexToEntityId(index);
+      const id = String(record.id ?? record.playerIndex ?? fallbackId);
+      const name = String(record.name ?? `玩家 ${id}`);
+      const rawAttrs =
+        record.attributes && typeof record.attributes === 'object'
+          ? (record.attributes as Record<string, unknown>)
+          : {};
+      const attributes: Record<string, number> = {};
+      for (const [attrKey, attrValue] of Object.entries(rawAttrs)) {
+        const numeric = toFiniteNumber(attrValue, 0);
+        attributes[attrKey] = numeric;
+      }
+      return {
+        id,
+        name,
+        cash: toFiniteNumber(record.cash, 0),
+        attributes,
+        passiveIncome: toFiniteNumber(record.passiveIncome, 0),
+        passiveExpense: toFiniteNumber(record.passiveExpense, 0),
+      };
+    });
+  }
+
+  const fallbackByDecision = inferenceData.decisions || [];
+  if (fallbackByDecision.length > 0) {
+    return fallbackByDecision.map((decision, index) => ({
+      id: indexToEntityId(index),
+      name: decision.nickname || decision.username || `玩家 ${index + 1}`,
+      cash: 0,
+      attributes: {},
+      passiveIncome: 0,
+      passiveExpense: 0,
+    }));
+  }
+
+  return [];
+}
+
+function normalizeOutcomesToEntityPanels(outcomes: unknown, inferenceData: InferenceRequest): any[] {
+  if (!Array.isArray(outcomes)) return [];
+  return outcomes.map((outcome, index) => {
+    const record = (outcome || {}) as Record<string, unknown>;
+    const resources =
+      record.resources && typeof record.resources === 'object'
+        ? (record.resources as Record<string, unknown>)
+        : {};
+    const decision = inferenceData.decisions?.find(
+      d => d.playerIndex === Number(record.playerIndex)
+    );
+    return {
+      id: String(record.playerIndex ?? record.player_id ?? indexToEntityId(index)),
+      name: decision?.nickname || decision?.username || `玩家 ${index + 1}`,
+      cash: toFiniteNumber(resources.cash ?? resources.money, 0),
+      attributes:
+        resources.attributes && typeof resources.attributes === 'object'
+          ? resources.attributes
+          : resources,
+      passiveIncome: toFiniteNumber(resources.passiveIncome, 0),
+      passiveExpense: toFiniteNumber(resources.passiveExpense, 0),
+      delta: {},
+    };
+  });
+}
+
+function normalizeEntityDelta(
+  panel: any,
+  baseEntity: {
+    cash: number;
+    attributes: Record<string, number>;
+    passiveIncome: number;
+    passiveExpense: number;
+  }
+): Record<string, number> {
+  const delta: Record<string, number> = {};
+  const rawDelta =
+    panel && typeof panel === 'object' && panel.delta && typeof panel.delta === 'object'
+      ? (panel.delta as Record<string, unknown>)
+      : {};
+
+  for (const [key, value] of Object.entries(rawDelta)) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      delta[key] = roundNumber(numeric);
+    }
+  }
+
+  const panelCash = panel && panel.cash !== undefined ? Number(panel.cash) : Number.NaN;
+  if (!Number.isFinite(delta.cash) && Number.isFinite(panelCash)) {
+    delta.cash = roundNumber(panelCash - baseEntity.cash);
+  }
+
+  const panelPassiveIncome =
+    panel && panel.passiveIncome !== undefined ? Number(panel.passiveIncome) : Number.NaN;
+  if (!Number.isFinite(delta.passiveIncome) && Number.isFinite(panelPassiveIncome)) {
+    delta.passiveIncome = roundNumber(panelPassiveIncome - baseEntity.passiveIncome);
+  }
+
+  const panelPassiveExpense =
+    panel && panel.passiveExpense !== undefined ? Number(panel.passiveExpense) : Number.NaN;
+  if (!Number.isFinite(delta.passiveExpense) && Number.isFinite(panelPassiveExpense)) {
+    delta.passiveExpense = roundNumber(panelPassiveExpense - baseEntity.passiveExpense);
+  }
+
+  const panelAttributes =
+    panel && panel.attributes && typeof panel.attributes === 'object'
+      ? (panel.attributes as Record<string, unknown>)
+      : {};
+  for (const [attrKey, attrValue] of Object.entries(panelAttributes)) {
+    if (attrKey in delta) continue;
+    const attrNumber = Number(attrValue);
+    if (!Number.isFinite(attrNumber)) continue;
+    const baseValue = toFiniteNumber(baseEntity.attributes[attrKey], 0);
+    delta[attrKey] = roundNumber(attrNumber - baseValue);
+  }
+
+  return delta;
+}
+
+function pickMetricValue(
+  attributes: Record<string, number>,
+  panel: any,
+  keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    if (Number.isFinite(attributes[key])) {
+      return roundNumber(attributes[key]);
+    }
+    const fromPanel = panel && panel[key] !== undefined ? Number(panel[key]) : Number.NaN;
+    if (Number.isFinite(fromPanel)) {
+      return roundNumber(fromPanel);
+    }
+  }
+  return undefined;
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundNumber(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function indexToEntityId(index: number): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return letters[index] || `E${index + 1}`;
+}
+
+function buildNextGameState(
+  baselineGameState: Record<string, unknown> | null | undefined,
+  uiTurnResult: ReturnType<typeof buildTurnResultDTO>,
+  round: number
+): Record<string, unknown> {
+  const baseState =
+    baselineGameState && typeof baselineGameState === 'object' ? baselineGameState : {};
+  const existingPlayers = Array.isArray(baseState.players) ? baseState.players : [];
+  const existingEntities = Array.isArray(baseState.entities) ? baseState.entities : [];
+
+  const players = uiTurnResult.perEntityPanel.map((panel, index) => {
+    const matchedBase =
+      (existingPlayers[index] as Record<string, unknown> | undefined) ||
+      (existingEntities[index] as Record<string, unknown> | undefined) ||
+      {};
+
+    return {
+      ...matchedBase,
+      id: panel.id,
+      name: panel.name,
+      cash: panel.cash,
+      attributes: panel.attributes,
+      passiveIncome: panel.passiveIncome,
+      passiveExpense: panel.passiveExpense,
+      playerIndex: toFiniteNumber(matchedBase.playerIndex, index),
+    };
+  });
+
+  const entities = players.map(player => {
+    const playerRecord = player as Record<string, unknown>;
+    return {
+      id: player.id,
+      name: player.name,
+      cash: player.cash,
+      attributes: player.attributes,
+      passiveIncome: player.passiveIncome,
+      passiveExpense: player.passiveExpense,
+      backstory: playerRecord.backstory,
+    };
+  });
+
+  return {
+    ...baseState,
+    players,
+    entities,
+    currentHexagram: uiTurnResult.hexagram || baseState.currentHexagram,
+    uiTurnResult,
+    lastInferenceRound: round,
   };
 }
 

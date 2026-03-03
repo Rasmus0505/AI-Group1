@@ -81,6 +81,7 @@ model HostConfig {
   apiEndpoint              String?
   apiHeaders               Json?
   apiBodyTemplate          Json?
+  useJsonSchema            Boolean   @default(false)
   validationStatus         String    @default("pending")
   validationMessage        String?
   validatedAt              DateTime?

@@ -73,6 +73,7 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
         'Content-Type': 'application/json'
       },
       apiBodyTemplate: defaultBodyTemplate,
+      useJsonSchema: false,
       totalDecisionEntities: room.maxPlayers,
       humanPlayerCount: Math.max(room.currentPlayers, 1),
       aiPlayerCount: 0,
@@ -89,6 +90,7 @@ const toHostConfigResponse = (cfg: any) => ({
   apiEndpoint: cfg.apiEndpoint,
   apiHeaders: cfg.apiHeaders,
   apiBodyTemplate: cfg.apiBodyTemplate,
+  useJsonSchema: cfg.useJsonSchema,
   apiConfig: cfg.apiConfig,
   gameRules: cfg.gameRules,
   totalDecisionEntities: cfg.totalDecisionEntities,
@@ -692,6 +694,7 @@ router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, 
       apiEndpoint,
       apiHeaders,
       apiBodyTemplate,
+      useJsonSchema,
       gameRules,
       totalDecisionEntities,
       humanPlayerCount,
@@ -718,12 +721,16 @@ router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, 
         apiEndpoint: apiEndpoint ?? cfg.apiEndpoint,
         apiHeaders: apiHeaders ?? cfg.apiHeaders,
         apiBodyTemplate: apiBodyTemplate ?? cfg.apiBodyTemplate,
+        useJsonSchema: typeof useJsonSchema === 'boolean' ? useJsonSchema : cfg.useJsonSchema,
         apiConfig: {
           ...(cfg.apiConfig as object),
           provider: apiProvider ?? (cfg.apiConfig as any)?.provider,
           endpoint: apiEndpoint ?? (cfg.apiConfig as any)?.endpoint,
           headers: apiHeaders ?? (cfg.apiConfig as any)?.headers,
           bodyTemplate: apiBodyTemplate ?? (cfg.apiConfig as any)?.bodyTemplate,
+          useJsonSchema: typeof useJsonSchema === 'boolean'
+            ? useJsonSchema
+            : (cfg.apiConfig as any)?.useJsonSchema,
         },
         gameRules: gameRules ?? cfg.gameRules,
         totalDecisionEntities: total,
@@ -758,7 +765,13 @@ router.post('/:roomId/host-config/api', authenticateToken, async (req: AuthReque
     const userId = req.userId;
     const { roomId } = req.params;
     if (!userId) throw new AppError('Unauthorized', 401);
-    const { apiProvider, apiEndpoint, apiHeaders, apiBodyTemplate } = req.body || {};
+    const {
+      apiProvider,
+      apiEndpoint,
+      apiHeaders,
+      apiBodyTemplate,
+      useJsonSchema,
+    } = req.body || {};
 
     await ensureRoomHost(roomId, userId);
     const cfg = await getOrCreateHostConfig(roomId, userId);
@@ -770,12 +783,16 @@ router.post('/:roomId/host-config/api', authenticateToken, async (req: AuthReque
         apiEndpoint: apiEndpoint ?? cfg.apiEndpoint,
         apiHeaders: apiHeaders ?? cfg.apiHeaders,
         apiBodyTemplate: apiBodyTemplate ?? cfg.apiBodyTemplate,
+        useJsonSchema: typeof useJsonSchema === 'boolean' ? useJsonSchema : cfg.useJsonSchema,
         apiConfig: {
           ...(cfg.apiConfig as object),
           provider: apiProvider ?? (cfg.apiConfig as any)?.provider,
           endpoint: apiEndpoint ?? (cfg.apiConfig as any)?.endpoint,
           headers: apiHeaders ?? (cfg.apiConfig as any)?.headers,
           bodyTemplate: apiBodyTemplate ?? (cfg.apiConfig as any)?.bodyTemplate,
+          useJsonSchema: typeof useJsonSchema === 'boolean'
+            ? useJsonSchema
+            : (cfg.apiConfig as any)?.useJsonSchema,
         },
         validationStatus: 'pending',
         validationMessage: null,

@@ -321,7 +321,6 @@ function HostReviewPage() {
                 type="primary"
                 danger
                 onClick={() => setSubmitModalVisible(true)}
-                disabled={reviewData.actions.length === 0}
               >
                 提交给AI推演
               </Button>

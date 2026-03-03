@@ -40,7 +40,7 @@ const io = new Server(httpServer, {
   },
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 // Middleware
 app.use(helmet({
@@ -106,7 +106,7 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../frontend/dist')));
   
   // 所有非 API 请求返回 index.html (支持 React Router)
-  app.get('*', (req, res) => {
+  app.get('*', (_req, res) => {
     res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
   });
 }
