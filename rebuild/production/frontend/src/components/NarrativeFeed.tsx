@@ -34,6 +34,7 @@ const NarrativeFeed: React.FC<NarrativeFeedProps> = ({
     // 重置流式文本
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     setVisibleText('');
 
@@ -43,6 +44,7 @@ const NarrativeFeed: React.FC<NarrativeFeedProps> = ({
         if (index > fullText.length) {
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
+            intervalRef.current = null;
           }
           return;
         }
@@ -57,6 +59,7 @@ const NarrativeFeed: React.FC<NarrativeFeedProps> = ({
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [phase, fullText]);

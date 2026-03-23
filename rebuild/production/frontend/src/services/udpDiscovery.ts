@@ -1,8 +1,6 @@
 // UDP服务器发现服务，用于在局域网内发现游戏服务器
 
 class UdpDiscoveryService {
-  private discoveryPort = 41234;
-  private udpSocket: any = null;
   private discoveredServers: Array<{ ip: string; port: number; name: string; timestamp: number }> = [];
   private onServerDiscoveredCallback: ((servers: Array<{ ip: string; port: number; name: string }>) => void) | null = null;
   private cleanupTimeout: number | null = null;

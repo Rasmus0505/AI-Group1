@@ -49,6 +49,80 @@ interface UseGameSyncOptions {
   onTimeout?: () => void;
 }
 
+const asRecord = (value: unknown): Record<string, any> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+};
+
+const unwrapInferencePayload = (value: unknown): Record<string, any> => {
+  const root = asRecord(value);
+  if (!root) return {};
+
+  const queue: Record<string, any>[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (
+      typeof current.narrative === 'string' ||
+      typeof current.coreNarrative === 'string' ||
+      typeof current.core_narrative === 'string' ||
+      Array.isArray(current.events) ||
+      Array.isArray(current.perEntityPanel) ||
+      Array.isArray(current.outcomes)
+    ) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+};
+
+const createNarrativeOnlyTurnResult = (narrative: string): TurnResultDTO => ({
+  narrative,
+  events: [],
+  redactedSegments: [],
+  perEntityPanel: [],
+  leaderboard: [],
+  riskCard: '',
+  opportunityCard: '',
+  benefitCard: '',
+  achievements: [],
+  options: [],
+  branchingNarratives: [],
+});
+
+const extractTurnResult = (value: unknown): TurnResultDTO | null => {
+  const payload = unwrapInferencePayload(value);
+  const uiTurn = payload.uiTurnResult as TurnResultDTO | undefined;
+  if (uiTurn && typeof uiTurn === 'object' && !Array.isArray(uiTurn)) {
+    return uiTurn;
+  }
+
+  if (
+    Array.isArray(payload.perEntityPanel) ||
+    Array.isArray(payload.events) ||
+    Array.isArray(payload.options)
+  ) {
+    return payload as TurnResultDTO;
+  }
+
+  const narrative =
+    (typeof payload.narrative === 'string' ? payload.narrative : '') ||
+    (typeof payload.coreNarrative === 'string' ? payload.coreNarrative : '') ||
+    (typeof payload.core_narrative === 'string' ? payload.core_narrative : '');
+
+  return narrative ? createNarrativeOnlyTurnResult(narrative) : null;
+};
+
 /**
  * useGameSync - 游戏状态实时同步 Hook
  * 
@@ -131,9 +205,8 @@ export function useGameSync(options: UseGameSyncOptions) {
 
       // 如果有推演结果，加载它
       if (gameState.inferenceResult?.result) {
-        const result = gameState.inferenceResult.result as any;
-        const turnResult: TurnResultDTO | undefined = result.uiTurnResult || result;
-        
+        const turnResult = extractTurnResult(gameState.inferenceResult.result);
+
         if (turnResult) {
           setState(prev => ({ ...prev, turnResult }));
           
@@ -165,9 +238,8 @@ export function useGameSync(options: UseGameSyncOptions) {
       const result = await gameAPI.getInferenceResult(sessionId, targetRound);
       
       if (result.status === 'completed' && result.result) {
-        const turnResult: TurnResultDTO | undefined = 
-          result.result.uiTurnResult || (result.result as any);
-        
+        const turnResult = extractTurnResult(result.result);
+
         if (turnResult) {
           setState(prev => ({ ...prev, turnResult }));
           onInferenceComplete?.(turnResult);

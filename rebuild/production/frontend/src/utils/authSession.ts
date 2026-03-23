@@ -22,7 +22,44 @@ const decodeJwtPayload = (token: string): JwtPayload | null => {
   }
 };
 
-export const getStoredToken = (): string | null => localStorage.getItem(TOKEN_STORAGE_KEY);
+const getTokenFromPersistedAuthStore = (): string | null => {
+  const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as
+      | { state?: { token?: unknown } }
+      | { token?: unknown }
+      | null;
+
+    const stateToken =
+      parsed && typeof parsed === 'object' && 'state' in parsed
+        ? (parsed as { state?: { token?: unknown } }).state?.token
+        : undefined;
+    const directToken =
+      parsed && typeof parsed === 'object' && 'token' in parsed
+        ? (parsed as { token?: unknown }).token
+        : undefined;
+    const token = typeof stateToken === 'string'
+      ? stateToken
+      : typeof directToken === 'string'
+        ? directToken
+        : null;
+
+    if (token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    }
+
+    return token;
+  } catch {
+    return null;
+  }
+};
+
+export const getStoredToken = (): string | null =>
+  localStorage.getItem(TOKEN_STORAGE_KEY) || getTokenFromPersistedAuthStore();
 
 export const setStoredToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token);

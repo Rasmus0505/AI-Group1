@@ -18,7 +18,6 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   RightOutlined,
-  ArrowLeftOutlined as ArrowLeft,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { gameAPI } from '../services/game';
@@ -66,6 +65,54 @@ interface RoundHistory {
   result?: any;
   completedAt?: string;
 }
+
+const asRecord = (value: unknown): Record<string, any> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+};
+
+const unwrapInferencePayload = (value: unknown): Record<string, any> => {
+  const root = asRecord(value);
+  if (!root) return {};
+
+  const queue: Record<string, any>[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (
+      typeof current.narrative === 'string' ||
+      typeof current.coreNarrative === 'string' ||
+      typeof current.core_narrative === 'string' ||
+      Array.isArray(current.events) ||
+      Array.isArray(current.perEntityPanel) ||
+      Array.isArray(current.outcomes)
+    ) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+};
+
+const extractInferenceNarrative = (value: unknown): string => {
+  const payload = unwrapInferencePayload(value);
+  const uiTurn = asRecord(payload.uiTurnResult);
+  return (
+    (typeof payload.narrative === 'string' ? payload.narrative : '') ||
+    (typeof payload.coreNarrative === 'string' ? payload.coreNarrative : '') ||
+    (typeof payload.core_narrative === 'string' ? payload.core_narrative : '') ||
+    (uiTurn && typeof uiTurn.narrative === 'string' ? uiTurn.narrative : '')
+  );
+};
 
 function GameStatePage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -264,6 +311,8 @@ function GameStatePage() {
     return colors[stage] || 'default';
   };
 
+  const inferenceNarrative = extractInferenceNarrative(gameState.inferenceResult?.result);
+
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto', minHeight: '100vh' }}>
       <div style={{ marginBottom: '16px' }}>
@@ -386,9 +435,9 @@ function GameStatePage() {
           {/* 推演结果 */}
           {gameState.roundStatus === 'result' && gameState.inferenceResult?.result && (
             <Card title="本轮推演结果" size="small">
-              {gameState.inferenceResult.result.narrative && (
+              {inferenceNarrative && (
                 <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
-                  {gameState.inferenceResult.result.narrative}
+                  {inferenceNarrative}
                 </Paragraph>
               )}
               <Button

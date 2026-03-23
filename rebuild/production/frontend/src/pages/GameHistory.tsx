@@ -39,6 +39,54 @@ const formatDate = (dateString: string) => {
 
 const { Text } = Typography;
 
+const asRecord = (value: unknown): Record<string, any> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+};
+
+const unwrapInferencePayload = (value: unknown): Record<string, any> => {
+  const root = asRecord(value);
+  if (!root) return {};
+
+  const queue: Record<string, any>[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (
+      typeof current.narrative === 'string' ||
+      typeof current.coreNarrative === 'string' ||
+      typeof current.core_narrative === 'string' ||
+      Array.isArray(current.events) ||
+      Array.isArray(current.perEntityPanel) ||
+      Array.isArray(current.outcomes)
+    ) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+};
+
+const extractRoundNarrative = (value: unknown): string => {
+  const payload = unwrapInferencePayload(value);
+  const uiTurn = asRecord(payload.uiTurnResult);
+  return (
+    (typeof payload.narrative === 'string' ? payload.narrative : '') ||
+    (typeof payload.coreNarrative === 'string' ? payload.coreNarrative : '') ||
+    (typeof payload.core_narrative === 'string' ? payload.core_narrative : '') ||
+    (uiTurn && typeof uiTurn.narrative === 'string' ? uiTurn.narrative : '')
+  );
+};
+
 interface HistoryItem {
   id: string;
   sessionId: string;
@@ -684,11 +732,11 @@ function GameHistoryPage() {
                       <Text strong>第 {result.round} 回合</Text>
                       <br />
                       <Text type="secondary">状态: {result.status}</Text>
-                      {result.result?.narrative && (
+                      {extractRoundNarrative(result.result) && (
                         <>
                           <br />
                           <Text style={{ whiteSpace: 'pre-wrap', fontSize: '12px' }}>
-                            {result.result.narrative.substring(0, 200)}...
+                            {extractRoundNarrative(result.result).substring(0, 200)}...
                           </Text>
                         </>
                       )}

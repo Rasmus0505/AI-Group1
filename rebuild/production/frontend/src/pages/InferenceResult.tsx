@@ -155,6 +155,7 @@ const mockTurnResult: TurnResultDTO = {
     '分支B：收缩防守，现金+2%，声誉-1%',
   ],
 };
+void mockTurnResult;
 
 // =========================
 // 电影式叙事播放器组件
@@ -189,8 +190,8 @@ function CinematicPlayer(props: CinematicPlayerProps) {
   }, [onEventTriggered]);
 
   useEffect(() => {
-    // 只有当 narrative 内容真正变化时才重新开始播放
-    if (narrative === prevNarrativeRef.current) {
+    // 避免 React 18 开发模式双执行 effect 时误判导致不播放
+    if (narrative === prevNarrativeRef.current && intervalRef.current !== null) {
       return;
     }
     prevNarrativeRef.current = narrative;
@@ -198,6 +199,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
     // 每次 narrative 变化时，从头开始播放
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     setDisplayedText('');
     triggeredKeywordsRef.current = new Set();
@@ -212,6 +214,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
       if (index > narrative.length) {
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
         return;
       }
@@ -238,6 +241,7 @@ function CinematicPlayer(props: CinematicPlayerProps) {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [narrative, events]); // 移除 onEventTriggered 依赖，使用 ref 代替
@@ -284,6 +288,188 @@ const asRecord = (value: unknown): Record<string, any> | null => {
   return value as Record<string, any>;
 };
 
+const NARRATIVE_KEYS = [
+  'narrative',
+  'coreNarrative',
+  'core_narrative',
+  'mainNarrative',
+  'main_narrative',
+  'story',
+  'coreStory',
+  'summary',
+  'text',
+  'content',
+  '叙事',
+  '核心叙事',
+  '核心剧情',
+];
+
+const getDirectNarrative = (record: Record<string, any>): string => {
+  for (const key of NARRATIVE_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      const firstString = value.find(item => typeof item === 'string' && item.trim());
+      if (typeof firstString === 'string') {
+        return firstString.trim();
+      }
+    }
+  }
+  return '';
+};
+
+const extractNarrativeText = (value: unknown): string => {
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+
+  const root = asRecord(value);
+  if (!root) return '';
+
+  const queue: unknown[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (typeof current === 'string' && current.trim()) {
+      return current.trim();
+    }
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (!seen.has(item)) {
+          seen.add(item);
+          queue.push(item);
+        }
+      }
+      continue;
+    }
+    const record = asRecord(current);
+    if (!record) {
+      continue;
+    }
+
+    const direct = getDirectNarrative(record);
+    if (direct) {
+      return direct;
+    }
+
+    for (const [key, value] of Object.entries(record)) {
+      if (value === undefined || value === null || seen.has(value)) {
+        continue;
+      }
+      seen.add(value);
+      if (
+        key.toLowerCase().includes('narrative') ||
+        key.toLowerCase().includes('story') ||
+        key.toLowerCase().includes('summary') ||
+        key.includes('叙事') ||
+        key.includes('剧情')
+      ) {
+        queue.unshift(value);
+      } else {
+        queue.push(value);
+      }
+    }
+  }
+
+  return '';
+};
+
+const extractStateNarrative = (state: any): string => {
+  if (!state) return '';
+  return (
+    extractNarrativeText(state?.inferenceResult?.result) ||
+    extractNarrativeText(state?.inferenceResult) ||
+    extractNarrativeText(state?.gameState?.uiTurnResult) ||
+    (typeof state?.gameState?.narrative === 'string' ? state.gameState.narrative : '') ||
+    (typeof state?.gameState?.backgroundStory === 'string' ? state.gameState.backgroundStory : '')
+  );
+};
+
+const extractStateUiTurnResult = (state: any): TurnResultDTO | undefined => {
+  if (!state) return undefined;
+
+  const rawResult = unwrapInferencePayload(state?.inferenceResult?.result);
+  const candidate = (rawResult?.uiTurnResult || rawResult) as TurnResultDTO | undefined;
+  const hasTurnShape =
+    !!candidate &&
+    (typeof candidate.narrative === 'string' ||
+      Array.isArray(candidate.events) ||
+      Array.isArray(candidate.perEntityPanel) ||
+      Array.isArray(candidate.options));
+  if (hasTurnShape) {
+    return candidate;
+  }
+
+  const gameStateCandidate = (state?.gameState as any)?.uiTurnResult as TurnResultDTO | undefined;
+  return gameStateCandidate;
+};
+
+const getStateInferenceRound = (state: any): number | null => {
+  if (!state) return null;
+  const currentRound = Number(state.currentRound);
+  if (!Number.isFinite(currentRound) || currentRound <= 0) return null;
+
+  if (
+    state.roundStatus === 'result' ||
+    state.roundStatus === 'inference' ||
+    state.roundStatus === 'finished'
+  ) {
+    return currentRound;
+  }
+  if (state.roundStatus === 'decision' && currentRound > 1) {
+    return currentRound - 1;
+  }
+  return null;
+};
+
+const buildResultFromStateSnapshot = (
+  sessionId: string,
+  targetRound: number,
+  state: any
+): InferenceResult | null => {
+  if (!state) return null;
+
+  const stateRound = getStateInferenceRound(state);
+  const currentRound = Number(state.currentRound);
+  const sameRound =
+    stateRound === targetRound ||
+    (Number.isFinite(currentRound) && currentRound === targetRound);
+  if (!sameRound) return null;
+
+  const rawResult = unwrapInferencePayload(state.inferenceResult?.result);
+  const stateUiTurnResult = extractStateUiTurnResult(state);
+  const narrativeFromState = extractStateNarrative(state);
+
+  const hasRenderablePayload =
+    !!narrativeFromState ||
+    !!rawResult?.uiTurnResult ||
+    !!stateUiTurnResult ||
+    (Array.isArray(rawResult?.events) && rawResult.events.length > 0) ||
+    (Array.isArray(rawResult?.outcomes) && rawResult.outcomes.length > 0);
+
+  if (!hasRenderablePayload) return null;
+
+  return {
+    sessionId: sessionId || '',
+    round: targetRound,
+    status:
+      state.inferenceResult?.status === 'completed' || narrativeFromState
+        ? 'completed'
+        : 'processing',
+      result: {
+        narrative: narrativeFromState || undefined,
+        uiTurnResult: rawResult?.uiTurnResult || stateUiTurnResult,
+        outcomes: rawResult?.outcomes,
+      events: rawResult?.events,
+      nextRoundHints: rawResult?.nextRoundHints || stateUiTurnResult?.nextRoundHints,
+    },
+    completedAt: state.inferenceResult?.completedAt,
+  };
+};
+
 const unwrapInferencePayload = (value: unknown): Record<string, any> => {
   const root = asRecord(value);
   if (!root) return {};
@@ -294,11 +480,10 @@ const unwrapInferencePayload = (value: unknown): Record<string, any> => {
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (
-      typeof current.narrative === 'string' ||
-      Array.isArray(current.events) ||
-      Array.isArray(current.perEntityPanel) ||
-      Array.isArray(current.outcomes) ||
-      typeof current.nextRoundHints === 'string'
+      !!getDirectNarrative(current) ||
+      (Array.isArray(current.events) && current.events.length > 0) ||
+      (Array.isArray(current.perEntityPanel) && current.perEntityPanel.length > 0) ||
+      (Array.isArray(current.outcomes) && current.outcomes.length > 0)
     ) {
       return current;
     }
@@ -332,7 +517,7 @@ function InferenceResultPage() {
   // 统一的回合结果视图模型：优先使用后端返回，AI处理中时显示空数据
   const turnResult: TurnResultDTO = useMemo(() => {
     // 如果 AI 正在处理中，返回空数据结构（不显示 mock 数据）
-    if (!result || result.status === 'processing') {
+    if (!result || !result.result) {
       return {
         narrative: '',
         events: [],
@@ -353,29 +538,27 @@ function InferenceResultPage() {
     }
     
     // AI 完成后，使用真实数据
-    if (result.status === 'completed' && result.result) {
+    if (result.result) {
       const normalizedResult = unwrapInferencePayload(result.result);
       const ui = normalizedResult.uiTurnResult || normalizedResult;
-      const narrative =
-        normalizedResult.uiTurnResult?.narrative ||
-        normalizedResult.narrative ||
-        '';
+      const uiNarrative = typeof (ui as any).narrative === 'string' ? (ui as any).narrative : '';
+      const narrative = extractNarrativeText(result.result) || uiNarrative || '';
       
       return {
         narrative: narrative,
-        events: (ui as any).events || [],
-        redactedSegments: (ui as any).redactedSegments || [],
-        perEntityPanel: (ui as any).perEntityPanel || [],
-        leaderboard: (ui as any).leaderboard || [],
+        events: Array.isArray((ui as any).events) ? (ui as any).events : [],
+        redactedSegments: Array.isArray((ui as any).redactedSegments) ? (ui as any).redactedSegments : [],
+        perEntityPanel: Array.isArray((ui as any).perEntityPanel) ? (ui as any).perEntityPanel : [],
+        leaderboard: Array.isArray((ui as any).leaderboard) ? (ui as any).leaderboard : [],
         riskCard: (ui as any).riskCard || '',
         opportunityCard: (ui as any).opportunityCard || '',
         benefitCard: (ui as any).benefitCard || '',
-        achievements: (ui as any).achievements || [],
+        achievements: Array.isArray((ui as any).achievements) ? (ui as any).achievements : [],
         hexagram: (ui as any).hexagram,
-        options: (ui as any).options || [],
+        options: Array.isArray((ui as any).options) ? (ui as any).options : [],
         perEntityOptions: (ui as any).perEntityOptions || {},
         ledger: (ui as any).ledger,
-        branchingNarratives: (ui as any).branchingNarratives || [],
+        branchingNarratives: Array.isArray((ui as any).branchingNarratives) ? (ui as any).branchingNarratives : [],
         roundTitle: (ui as any).roundTitle,
         cashFlowWarning: (ui as any).cashFlowWarning,
       };
@@ -686,76 +869,136 @@ function InferenceResultPage() {
 
   const loadResult = async () => {
     if (!sessionId || !round) return;
+
+    const targetRound = Number(round);
+    if (!Number.isFinite(targetRound) || targetRound <= 0) {
+      return;
+    }
+
     try {
-      // 首先尝试从 inference-result 接口获取
-      const data = await gameAPI.getInferenceResult(sessionId, Number(round));
-      setResult(data);
-      
-      // 如果 narrative 为空，尝试从 getGameState 获取（与 GameSession 保持一致）
-      const normalizedDataResult = unwrapInferencePayload(data.result);
-      if (
-        data.status === 'completed' &&
-        !normalizedDataResult?.uiTurnResult?.narrative &&
-        !normalizedDataResult?.narrative
-      ) {
+      const data = await gameAPI.getInferenceResult(sessionId, targetRound);
+      let nextResult: InferenceResult = data;
+      let stateSnapshot: any = null;
+
+      const apiNarrative = extractNarrativeText(data.result);
+      const needsStateReconcile = data.status !== 'completed' || !apiNarrative;
+
+      if (needsStateReconcile || !extractNarrativeText(nextResult.result)) {
         try {
-          const state = await gameAPI.getGameState(sessionId);
-          const rawResult = unwrapInferencePayload(state.inferenceResult?.result);
-          if (rawResult?.uiTurnResult?.narrative || rawResult?.narrative) {
-            // 合并数据
-            setResult({
-              ...data,
+          if (!stateSnapshot) {
+            stateSnapshot = await gameAPI.getGameState(sessionId);
+          }
+          const fromState = buildResultFromStateSnapshot(sessionId, targetRound, stateSnapshot);
+          if (fromState) {
+            nextResult = {
+              ...nextResult,
+              status: fromState.status,
               result: {
-                ...data.result,
-                narrative: rawResult?.narrative || data.result?.narrative,
-                uiTurnResult: rawResult?.uiTurnResult || data.result?.uiTurnResult,
+                ...nextResult.result,
+                ...fromState.result,
+                narrative: fromState.result?.narrative || nextResult.result?.narrative,
+                uiTurnResult: fromState.result?.uiTurnResult || nextResult.result?.uiTurnResult,
+                outcomes: fromState.result?.outcomes || nextResult.result?.outcomes,
+                events: fromState.result?.events || nextResult.result?.events,
+                nextRoundHints:
+                  fromState.result?.nextRoundHints || nextResult.result?.nextRoundHints,
               },
-            });
+              completedAt: fromState.completedAt || nextResult.completedAt,
+            };
+          } else {
+            const emergencyNarrative = extractStateNarrative(stateSnapshot);
+            const emergencyUiTurn = extractStateUiTurnResult(stateSnapshot);
+            if (
+              (emergencyNarrative || emergencyUiTurn) &&
+              !extractNarrativeText(nextResult.result)
+            ) {
+              nextResult = {
+                ...nextResult,
+                status: emergencyNarrative ? 'completed' : nextResult.status,
+                result: {
+                  ...nextResult.result,
+                  narrative: emergencyNarrative || nextResult.result?.narrative,
+                  uiTurnResult: emergencyUiTurn || nextResult.result?.uiTurnResult,
+                },
+              };
+            }
           }
         } catch {
-          // 忽略备选数据源失败
+          // ignore state reconcile errors and keep inference-result response
         }
       }
-      
-      // 获取会话信息以获取 roomId（用于加入 WebSocket 房间）
+
+      console.info('[InferenceResult] loadResult', {
+        sessionId,
+        targetRound,
+        apiStatus: data.status,
+        apiNarrativeLength: apiNarrative.length,
+        stateNarrativeLength: stateSnapshot ? extractStateNarrative(stateSnapshot).length : 0,
+        finalNarrativeLength: extractNarrativeText(nextResult.result).length,
+      });
+      setResult(nextResult);
+
       if (!roomId) {
-        try {
-          const sessionData = await gameAPI.getSession(sessionId);
-          if (sessionData.roomId) {
-            setRoomId(sessionData.roomId);
+        if (stateSnapshot?.roomId) {
+          setRoomId(stateSnapshot.roomId);
+        } else {
+          try {
+            const sessionData = await gameAPI.getSession(sessionId);
+            if (sessionData.roomId) {
+              setRoomId(sessionData.roomId);
+            }
+          } catch {
+            // ignore missing room id fallback
           }
-        } catch {
-          // 忽略获取会话信息失败
         }
       }
-    } catch (err: any) {
-      // 如果 inference-result 接口失败，尝试从 getGameState 获取
+    } catch {
+      // inference-result fallback path: read /state for this round
       try {
         const state = await gameAPI.getGameState(sessionId);
-        const rawResult = state.inferenceResult?.result as any;
-        if (rawResult) {
-          setResult({
+        const fromState = buildResultFromStateSnapshot(sessionId, targetRound, state);
+        if (fromState) {
+          setResult(fromState);
+          if (!roomId && state.roomId) {
+            setRoomId(state.roomId);
+          }
+          return;
+        }
+
+        const emergencyNarrative = extractStateNarrative(state);
+        const emergencyUiTurn = extractStateUiTurnResult(state);
+        if (emergencyNarrative || emergencyUiTurn) {
+          console.info('[InferenceResult] loadResult(state-fallback)', {
             sessionId,
-            round: Number(round),
-            status: state.inferenceResult?.status === 'completed' ? 'completed' : 'processing',
-            result: {
-              narrative: rawResult?.narrative,
-              uiTurnResult: rawResult?.uiTurnResult,
-              outcomes: rawResult?.outcomes,
-              events: rawResult?.events,
-              nextRoundHints: rawResult?.nextRoundHints,
-            },
-            completedAt: state.inferenceResult?.completedAt,
+            targetRound,
+            stateNarrativeLength: emergencyNarrative.length,
+            hasUiTurnResult: !!emergencyUiTurn,
           });
+          setResult({
+            sessionId: sessionId || '',
+            round: targetRound,
+            status: emergencyNarrative ? 'completed' : 'processing',
+            result: {
+              narrative: emergencyNarrative || undefined,
+              uiTurnResult: emergencyUiTurn,
+            },
+          });
+          if (!roomId && state.roomId) {
+            setRoomId(state.roomId);
+          }
           return;
         }
       } catch {
-        // 忽略备选数据源失败
+        // ignore fallback failure
       }
-      message.error('同步结果失败');
+
+      console.warn('[InferenceResult] loadResult failed for both inference-result and state', {
+        sessionId,
+        targetRound,
+      });
+      message.error('Failed to sync inference result');
     }
   };
-
   /**
    * 当 CinematicPlayer 检测到关键字并触发事件时，更新资产并触发动效。
    */
@@ -784,6 +1027,20 @@ function InferenceResultPage() {
     }, 400);
   };
 
+  // Avoid relying only on websocket timing: keep pulling while inference is processing.
+  useEffect(() => {
+    if (!sessionId || !round) return;
+    if (result && result.status !== 'processing') return;
+
+    const timer = window.setInterval(() => {
+      loadResult();
+    }, 2000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [sessionId, round, result?.status, roomId]);
+
   useEffect(() => {
     loadResult();
     
@@ -794,7 +1051,32 @@ function InferenceResultPage() {
     }
     
     const handleProgress = (p: any) => setProgress(p);
-    const handleCompleted = () => loadResult();
+    const handleCompleted = (payload: any) => {
+      const completedRound = Number(payload?.round);
+      const targetRound = Number(round);
+      console.info('[InferenceResult] inference_completed', {
+        payloadRound: completedRound,
+        targetRound,
+        hasResult: !!payload?.result,
+        narrativeLength: extractNarrativeText(payload?.result).length,
+      });
+      if (
+        payload?.sessionId === sessionId &&
+        Number.isFinite(completedRound) &&
+        Number.isFinite(targetRound) &&
+        completedRound === targetRound &&
+        payload?.result
+      ) {
+        setResult({
+          sessionId: sessionId || '',
+          round: completedRound,
+          status: 'completed',
+          result: payload.result,
+          completedAt: new Date().toISOString(),
+        });
+      }
+      loadResult();
+    };
     const handleFailed = (payload: any) => {
       const errorData = payload as { error?: string; details?: string };
       setResult({
@@ -863,7 +1145,7 @@ function InferenceResultPage() {
             </span>
           </div>
         </Space>
-        {result?.status === 'processing' && (
+        {result?.status === 'processing' && !turnResult.narrative && (
           <div className="flex items-center gap-2 text-indigo-400 animate-pulse">
             <Loader2 className="animate-spin" size={20} />
             <span className="font-bold tracking-tighter">AI INFERRING...</span>
@@ -876,12 +1158,12 @@ function InferenceResultPage() {
           <Col span={16}>
             <GlassCard title="核心叙事" extra={<ScrollText size={18} />}>
               <div className="min-h-[400px] p-8 bg-slate-950/40 rounded-xl leading-relaxed text-xl font-serif">
-                {!result || result.status === 'processing' ? (
+                {!result ? (
                   <div className="flex flex-col items-center justify-center h-full py-20 opacity-40">
                     <Sparkles size={48} className="mb-4" />
                     <p>正在重构因果链路，构筑时空分叉...</p>
                   </div>
-                ) : result.status === 'failed' ? (
+                ) : result.status === 'failed' && !turnResult.narrative ? (
                   <div className="flex flex-col items-center justify-center h-full py-20">
                     <AlertTriangle size={48} className="mb-4 text-rose-500" />
                     <p className="text-rose-400 font-bold mb-2">推演失败</p>
@@ -903,8 +1185,16 @@ function InferenceResultPage() {
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full py-20 opacity-40">
                     <ScrollText size={48} className="mb-4" />
-                    <p>暂无叙事内容</p>
-                    <p className="text-sm text-slate-500 mt-2">AI推演结果中未包含核心剧情</p>
+                    <p>{result.status === 'processing' ? 'Generating narrative...' : 'No narrative yet'}</p>
+                    <p className="text-sm text-slate-500 mt-2">
+                      {result.status === 'processing'
+                        ? 'Inference status arrived; waiting for narrative payload'
+                        : 'AI result does not include core narrative'}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-2">
+                      debug: round={round} status={result.status} payloadNarrativeLen=
+                      {extractNarrativeText(result.result).length}
+                    </p>
                   </div>
                 )}
               </div>
@@ -914,11 +1204,11 @@ function InferenceResultPage() {
             {renderOptions(turnResult.options, turnResult.perEntityOptions)}
             {renderEntityPanel(turnResult.perEntityPanel)}
 
-            {result?.result?.nextRoundHints && (
+            {turnResult.nextRoundHints && (
               <GlassCard title="先导提示" className="border-indigo-500/30">
                 <div className="flex gap-4">
                   <Flag className="text-indigo-400 shrink-0" size={24} />
-                  <p className="text-slate-300 italic">{result.result.nextRoundHints}</p>
+                  <p className="text-slate-300 italic">{turnResult.nextRoundHints}</p>
                 </div>
               </GlassCard>
             )}

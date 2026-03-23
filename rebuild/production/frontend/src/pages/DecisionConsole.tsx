@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, Progress, Input, Button, Divider, Tag, Typography, Modal, Alert, Table, Spin } from 'antd';
 import { Activity, TrendingUp, ShieldCheck, Zap, Layers, BookOpen, BarChart2 } from 'lucide-react';
-import { TurnResultDTO, TurnLedger, TurnHexagram, TurnOption, TurnEntityPanel } from '../types/turnResult';
+import { TurnResultDTO, TurnEntityPanel } from '../types/turnResult';
 import { gameAPI } from '../services/game';
 import DivinationOverlay from '../components/DivinationOverlay';
 
