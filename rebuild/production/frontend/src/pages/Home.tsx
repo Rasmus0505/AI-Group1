@@ -50,6 +50,10 @@ function Home() {
     setResumeLoading(true);
     try {
       const session = await gameAPI.getActiveSessionByRoom(activeRoom.id);
+      if (!session) {
+        message.info('当前房间没有进行中的对局');
+        return;
+      }
       message.success('正在进入游戏...');
       navigate(`/game/${session.sessionId}`);
     } catch (err) {

@@ -220,6 +220,11 @@ function Rooms() {
       const hideLoading = message.loading('正在定位游戏会话...', 0);
       
       const session = await gameAPI.getActiveSessionByRoom(roomId);
+      if (!session) {
+        hideLoading();
+        message.info('当前房间没有进行中的对局');
+        return;
+      }
       console.log('获取到游戏会话:', session);
       
       hideLoading();

@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import {
+  clearAuthSession,
+  getStoredToken,
+  isTokenExpired,
+  setStoredToken,
+} from '../utils/authSession';
 
 interface User {
   id?: string;
@@ -32,22 +38,24 @@ export const useAuthStore = create<AuthState>()(
           ...user,
           userId: user.userId ?? user.id,
         };
-        localStorage.setItem('token', token);
+        setStoredToken(token);
         set({ token, user: mappedUser, isAuthenticated: true });
       },
       logout: () => {
-        localStorage.removeItem('token');
+        clearAuthSession();
         set({ token: null, user: null, isAuthenticated: false });
       },
       setUser: (user: User) => {
         set({ user });
       },
       checkAuth: () => {
-        const token = localStorage.getItem('token');
-        if (token) {
+        const token = getStoredToken();
+        if (token && !isTokenExpired(token)) {
           set({ token, isAuthenticated: true });
           return true;
         }
+        clearAuthSession();
+        set({ token: null, user: null, isAuthenticated: false });
         return false;
       },
     }),

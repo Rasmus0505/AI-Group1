@@ -29,17 +29,23 @@ export const errorHandler = (
   const message = err.message || 'Internal Server Error';
 
   // 改进错误日志记录，确保错误信息被正确序列化
-  logger.error(
-    `Error ${statusCode} on ${req.method} ${req.path}: ${message}`,
-    {
-      error: err.message,
-      stack: err.stack,
-      path: req.path,
-      method: req.method,
-      statusCode,
-      code: err.code,
-    }
-  );
+  const logMessage = `Error ${statusCode} on ${req.method} ${req.path}: ${message}`;
+  const logMeta = {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    statusCode,
+    code: err.code,
+  };
+
+  if (statusCode >= 500) {
+    logger.error(logMessage, logMeta);
+  } else if (statusCode >= 400) {
+    logger.warn(logMessage, logMeta);
+  } else {
+    logger.info(logMessage, logMeta);
+  }
 
   res.status(statusCode).json({
     code: statusCode,

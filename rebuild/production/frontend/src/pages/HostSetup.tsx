@@ -37,7 +37,6 @@ import { DEFAULT_GAME_RULES } from '../constants/defaultRules';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { Panel } = Collapse;
 
 // 主流 AI 模型提供商配置
 const AI_PROVIDERS = [
@@ -396,6 +395,9 @@ function HostSetup() {
     if (!roomId) return;
     setSaving(true);
     try {
+      if (initData) {
+        await gameInitAPI.saveInit(roomId, initData);
+      }
       const data = await hostConfigAPI.complete(roomId);
       setConfig(data);
       message.success('主持人配置已完成');
@@ -491,7 +493,8 @@ function HostSetup() {
     try {
       const result = await attemptGeneration();
       setInitData(result);
-      message.success('游戏初始化数据生成成功！');
+      await gameInitAPI.saveInit(roomId, result);
+      message.success('游戏初始化数据生成并保存成功！');
     } catch (error: any) {
       console.error('Generate init error:', error);
       
@@ -679,16 +682,26 @@ function HostSetup() {
 
           {/* 高级配置（折叠） */}
           {selectedProvider === 'custom' && (
-            <Collapse ghost style={{ marginBottom: 16 }}>
-              <Panel header="高级配置（可选）" key="advanced">
-                <Form.Item label="自定义 Headers (JSON)" name="customHeaders">
-                  <TextArea rows={3} placeholder='{"X-Custom-Header": "value"}' />
-                </Form.Item>
-                <Form.Item label="自定义 Body 模板 (JSON)" name="customBodyTemplate">
-                  <TextArea rows={4} placeholder='使用 {{prompt}} 作为占位符' />
-                </Form.Item>
-              </Panel>
-            </Collapse>
+            <Collapse
+              ghost
+              style={{ marginBottom: 16 }}
+              items={[
+                {
+                  key: 'advanced',
+                  label: '高级配置（可选）',
+                  children: (
+                    <>
+                      <Form.Item label="自定义 Headers (JSON)" name="customHeaders">
+                        <TextArea rows={3} placeholder='{"X-Custom-Header": "value"}' />
+                      </Form.Item>
+                      <Form.Item label="自定义 Body 模板 (JSON)" name="customBodyTemplate">
+                        <TextArea rows={4} placeholder="使用 {{prompt}} 作为占位符" />
+                      </Form.Item>
+                    </>
+                  ),
+                },
+              ]}
+            />
           )}
 
           <Button type="primary" htmlType="submit" loading={saving}>
@@ -947,118 +960,141 @@ function HostSetup() {
           <div style={{ marginTop: 24 }}>
             <Divider>生成结果预览</Divider>
             
-            <Collapse defaultActiveKey={['story', 'entities']}>
-              <Panel header="商业背景故事" key="story">
-                <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
-                  {initData.backgroundStory}
-                </Paragraph>
-              </Panel>
-              
-              <Panel header={`主体初始状态（${initData.entities.length}个）`} key="entities">
-                <Table
-                  dataSource={initData.entities}
-                  rowKey="id"
-                  pagination={false}
-                  size="small"
-                  columns={[
-                    { title: 'ID', dataIndex: 'id', width: 60 },
-                    { title: '名称', dataIndex: 'name', width: 120 },
-                    {
-                      title: '初始资金',
-                      dataIndex: 'cash',
-                      render: (v: number) => `¥${v.toLocaleString()}`,
-                    },
-                    {
-                      title: '被动收入',
-                      dataIndex: 'passiveIncome',
-                      render: (v: number) => `+¥${v.toLocaleString()}`,
-                    },
-                    {
-                      title: '被动支出',
-                      dataIndex: 'passiveExpense',
-                      render: (v: number) => `-¥${v.toLocaleString()}`,
-                    },
-                    {
-                      title: '属性',
-                      dataIndex: 'attributes',
-                      render: (attrs: Record<string, number>) =>
-                        Object.entries(attrs || {})
-                          .map(([k, v]) => `${k}: ${v}`)
-                          .join(', '),
-                    },
-                  ]}
-                />
-              </Panel>
-              
-              <Panel header="年度卦象" key="hexagram">
-                <Space direction="vertical">
-                  <Text strong>
-                    {initData.yearlyHexagram.name}
-                    <Tag
-                      color={
-                        initData.yearlyHexagram.omen === 'positive'
-                          ? 'green'
-                          : initData.yearlyHexagram.omen === 'negative'
-                          ? 'red'
-                          : 'default'
-                      }
-                      style={{ marginLeft: 8 }}
-                    >
-                      {initData.yearlyHexagram.omen === 'positive'
-                        ? '吉'
-                        : initData.yearlyHexagram.omen === 'negative'
-                        ? '凶'
-                        : '中'}
-                    </Tag>
-                  </Text>
-                  <Text type="secondary">
-                    爻象：{initData.yearlyHexagram.lines.join(' ')}
-                  </Text>
-                  <Paragraph>{initData.yearlyHexagram.text}</Paragraph>
-                  {initData.yearlyHexagram.yearlyTheme && (
-                    <Text>年度主题：{initData.yearlyHexagram.yearlyTheme}</Text>
-                  )}
-                </Space>
-              </Panel>
-              
-              <Panel header="初始决策选项" key="options">
-                {initData.initialOptions.map((opt) => (
-                  <Card key={opt.id} size="small" style={{ marginBottom: 8 }}>
-                    <Text strong>
-                      {opt.id}. {opt.title}
-                    </Text>
-                    <Paragraph type="secondary" style={{ margin: '4px 0' }}>
-                      {opt.description}
+            <Collapse
+              defaultActiveKey={['story', 'entities']}
+              items={[
+                {
+                  key: 'story',
+                  label: '商业背景故事',
+                  children: (
+                    <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
+                      {initData.backgroundStory}
                     </Paragraph>
-                    {opt.expectedDelta && (
-                      <Space wrap>
-                        {Object.entries(opt.expectedDelta).map(([k, v]) => {
-                          // 处理嵌套对象的情况（如按主体分组的预期变化）
-                          if (typeof v === 'object' && v !== null) {
-                            return Object.entries(v).map(([subK, subV]) => (
-                              <Tag key={`${k}-${subK}`} color={typeof subV === 'number' && subV >= 0 ? 'green' : 'red'}>
-                                {k}/{subK}: {typeof subV === 'number' ? (subV >= 0 ? '+' : '') + subV : String(subV)}
-                              </Tag>
-                            ));
+                  ),
+                },
+                {
+                  key: 'entities',
+                  label: `主体初始状态（${initData.entities.length}个）`,
+                  children: (
+                    <Table
+                      dataSource={initData.entities}
+                      rowKey="id"
+                      pagination={false}
+                      size="small"
+                      columns={[
+                        { title: 'ID', dataIndex: 'id', width: 60 },
+                        { title: '名称', dataIndex: 'name', width: 120 },
+                        {
+                          title: '初始资金',
+                          dataIndex: 'cash',
+                          render: (v: number) => `¥${v.toLocaleString()}`,
+                        },
+                        {
+                          title: '被动收入',
+                          dataIndex: 'passiveIncome',
+                          render: (v: number) => `+¥${v.toLocaleString()}`,
+                        },
+                        {
+                          title: '被动支出',
+                          dataIndex: 'passiveExpense',
+                          render: (v: number) => `-¥${v.toLocaleString()}`,
+                        },
+                        {
+                          title: '属性',
+                          dataIndex: 'attributes',
+                          render: (attrs: Record<string, number>) =>
+                            Object.entries(attrs || {})
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(', '),
+                        },
+                      ]}
+                    />
+                  ),
+                },
+                {
+                  key: 'hexagram',
+                  label: '年度卦象',
+                  children: (
+                    <Space direction="vertical">
+                      <Text strong>
+                        {initData.yearlyHexagram.name}
+                        <Tag
+                          color={
+                            initData.yearlyHexagram.omen === 'positive'
+                              ? 'green'
+                              : initData.yearlyHexagram.omen === 'negative'
+                              ? 'red'
+                              : 'default'
                           }
-                          // 处理普通数值
-                          const numVal = typeof v === 'number' ? v : 0;
-                          return (
-                            <Tag key={k} color={numVal >= 0 ? 'green' : 'red'}>
-                              {k}: {numVal >= 0 ? '+' : ''}{numVal}
-                            </Tag>
-                          );
-                        })}
-                      </Space>
-                    )}
-                  </Card>
-                ))}
-              </Panel>
-              
-              <Panel header="资金公式" key="formula">
-                <Text code>{initData.cashFormula}</Text>
-              </Panel>
-            </Collapse>
+                          style={{ marginLeft: 8 }}
+                        >
+                          {initData.yearlyHexagram.omen === 'positive'
+                            ? '吉'
+                            : initData.yearlyHexagram.omen === 'negative'
+                            ? '凶'
+                            : '中'}
+                        </Tag>
+                      </Text>
+                      <Text type="secondary">
+                        爻象：{initData.yearlyHexagram.lines.join(' ')}
+                      </Text>
+                      <Paragraph>{initData.yearlyHexagram.text}</Paragraph>
+                      {initData.yearlyHexagram.yearlyTheme && (
+                        <Text>年度主题：{initData.yearlyHexagram.yearlyTheme}</Text>
+                      )}
+                    </Space>
+                  ),
+                },
+                {
+                  key: 'options',
+                  label: '初始决策选项',
+                  children: (
+                    <>
+                      {initData.initialOptions.map((opt) => (
+                        <Card key={opt.id} size="small" style={{ marginBottom: 8 }}>
+                          <Text strong>
+                            {opt.id}. {opt.title}
+                          </Text>
+                          <Paragraph type="secondary" style={{ margin: '4px 0' }}>
+                            {opt.description}
+                          </Paragraph>
+                          {opt.expectedDelta && (
+                            <Space wrap>
+                              {Object.entries(opt.expectedDelta).map(([k, v]) => {
+                                if (typeof v === 'object' && v !== null) {
+                                  return Object.entries(v).map(([subK, subV]) => (
+                                    <Tag
+                                      key={`${k}-${subK}`}
+                                      color={
+                                        typeof subV === 'number' && subV >= 0 ? 'green' : 'red'
+                                      }
+                                    >
+                                      {k}/{subK}: {typeof subV === 'number' ? (subV >= 0 ? '+' : '') + subV : String(subV)}
+                                    </Tag>
+                                  ));
+                                }
+                                const numVal = typeof v === 'number' ? v : 0;
+                                return (
+                                  <Tag key={k} color={numVal >= 0 ? 'green' : 'red'}>
+                                    {k}: {numVal >= 0 ? '+' : ''}
+                                    {numVal}
+                                  </Tag>
+                                );
+                              })}
+                            </Space>
+                          )}
+                        </Card>
+                      ))}
+                    </>
+                  ),
+                },
+                {
+                  key: 'formula',
+                  label: '资金公式',
+                  children: <Text code>{initData.cashFormula}</Text>,
+                },
+              ]}
+            />
           </div>
         )}
       </Card>

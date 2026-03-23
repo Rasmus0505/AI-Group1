@@ -112,10 +112,13 @@ export const gameAPI = {
     };
   },
 
-  getActiveSessionByRoom: async (roomId: string): Promise<GameSessionSummary> => {
+  getActiveSessionByRoom: async (roomId: string): Promise<GameSessionSummary | null> => {
     const response = (await apiClient.get(
       `/game/by-room/${roomId}/active-session`
     )) as any;
+    if (response?.code === 200 && !response.data) {
+      return null;
+    }
     if (response?.code === 200 && response.data) {
       const data = response.data as {
         sessionId: string;
@@ -779,5 +782,4 @@ export const gameInitAPI = {
     return null;
   },
 };
-
 
