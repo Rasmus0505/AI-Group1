@@ -279,6 +279,42 @@ interface InferenceProgress {
   message: string;
 }
 
+const asRecord = (value: unknown): Record<string, any> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+};
+
+const unwrapInferencePayload = (value: unknown): Record<string, any> => {
+  const root = asRecord(value);
+  if (!root) return {};
+
+  const queue: Record<string, any>[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (
+      typeof current.narrative === 'string' ||
+      Array.isArray(current.events) ||
+      Array.isArray(current.perEntityPanel) ||
+      Array.isArray(current.outcomes) ||
+      typeof current.nextRoundHints === 'string'
+    ) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+};
+
 function InferenceResultPage() {
   const { sessionId, round } = useParams<{ sessionId: string; round: string }>();
   const navigate = useNavigate();
@@ -318,10 +354,12 @@ function InferenceResultPage() {
     
     // AI 完成后，使用真实数据
     if (result.status === 'completed' && result.result) {
-      // 优先使用 uiTurnResult，如果不存在则从 result.result 直接获取
-      const ui = result.result.uiTurnResult || result.result;
-      // 核心剧情：优先使用 uiTurnResult.narrative，其次使用 result.result.narrative
-      const narrative = result.result.uiTurnResult?.narrative || result.result.narrative || '';
+      const normalizedResult = unwrapInferencePayload(result.result);
+      const ui = normalizedResult.uiTurnResult || normalizedResult;
+      const narrative =
+        normalizedResult.uiTurnResult?.narrative ||
+        normalizedResult.narrative ||
+        '';
       
       return {
         narrative: narrative,
@@ -654,10 +692,15 @@ function InferenceResultPage() {
       setResult(data);
       
       // 如果 narrative 为空，尝试从 getGameState 获取（与 GameSession 保持一致）
-      if (data.status === 'completed' && !data.result?.uiTurnResult?.narrative && !data.result?.narrative) {
+      const normalizedDataResult = unwrapInferencePayload(data.result);
+      if (
+        data.status === 'completed' &&
+        !normalizedDataResult?.uiTurnResult?.narrative &&
+        !normalizedDataResult?.narrative
+      ) {
         try {
           const state = await gameAPI.getGameState(sessionId);
-          const rawResult = state.inferenceResult?.result as any;
+          const rawResult = unwrapInferencePayload(state.inferenceResult?.result);
           if (rawResult?.uiTurnResult?.narrative || rawResult?.narrative) {
             // 合并数据
             setResult({

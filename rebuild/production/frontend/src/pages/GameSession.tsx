@@ -34,6 +34,56 @@ import type { TurnResultDTO, TurnAchievement, TurnHexagram } from '../types/turn
 
 const { TextArea } = Input;
 
+const asRecord = (value: unknown): Record<string, any> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+};
+
+const unwrapInferencePayload = (value: unknown): Record<string, any> => {
+  const root = asRecord(value);
+  if (!root) return {};
+
+  const queue: Record<string, any>[] = [root];
+  const seen = new Set<unknown>([root]);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (
+      typeof current.narrative === 'string' ||
+      Array.isArray(current.events) ||
+      Array.isArray(current.perEntityPanel) ||
+      Array.isArray(current.outcomes) ||
+      typeof current.nextRoundHints === 'string'
+    ) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+};
+
+const createNarrativeOnlyTurnResult = (narrative: string): TurnResultDTO => ({
+  narrative,
+  events: [],
+  redactedSegments: [],
+  perEntityPanel: [],
+  leaderboard: [],
+  riskCard: '',
+  opportunityCard: '',
+  benefitCard: '',
+  achievements: [],
+  options: [],
+  branchingNarratives: [],
+});
+
 function GameSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -198,10 +248,21 @@ function GameSessionPage() {
         const state = await gameAPI.getGameState(sessionId);
         setGameState(state.gameState); // 保存完整的游戏状态
         
-        const rawResult = state.inferenceResult?.result as any;
+        const rawResult = unwrapInferencePayload(state.inferenceResult?.result);
         const uiTurn: TurnResultDTO | undefined =
           rawResult?.uiTurnResult || (state.gameState as any)?.uiTurnResult;
-        setTurnResult(uiTurn || null);
+        if (uiTurn) {
+          setTurnResult(uiTurn);
+        } else {
+          const fallbackNarrative =
+            (typeof rawResult?.narrative === 'string' && rawResult.narrative) ||
+            (typeof (state.gameState as any)?.narrative === 'string'
+              ? (state.gameState as any).narrative
+              : '');
+          setTurnResult(
+            fallbackNarrative ? createNarrativeOnlyTurnResult(fallbackNarrative) : null
+          );
+        }
         
         // 更新现金流历史
         if (uiTurn?.ledger?.balance && session?.currentRound) {

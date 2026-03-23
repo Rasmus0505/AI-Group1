@@ -764,7 +764,8 @@ export class AIService {
 
     // 推演要求：引导输出蓝本要求的结构
     prompt += '## 推演要求\n';
-    prompt += '请根据以上信息进行推演，**必须以 JSON 格式输出**，确保可被前端直接解析。\n\n';
+    prompt += '请根据以上信息进行推演，**必须以 JSON 格式输出**，确保可被前端直接解析。\n';
+    prompt += '**每一回合都必须生成 perEntityOptions（每个主体 3 个选项）**，供下一回合玩家直接使用。\n\n';
     prompt += '### 输出 JSON Schema:\n';
     prompt += '```json\n';
     prompt += '{\n';
@@ -912,7 +913,7 @@ export class AIService {
     return {
       type: 'object',
       additionalProperties: true,
-      required: ['narrative', 'events', 'perEntityPanel', 'nextRoundHints'],
+      required: ['narrative', 'events', 'perEntityPanel', 'perEntityOptions', 'nextRoundHints'],
       properties: {
         narrative: { type: 'string' },
         nextRoundHints: { type: 'string' },
@@ -935,6 +936,30 @@ export class AIService {
               delta: {
                 type: 'object',
                 additionalProperties: { type: 'number' },
+              },
+            },
+          },
+        },
+        perEntityOptions: {
+          type: 'object',
+          additionalProperties: {
+            type: 'array',
+            minItems: 3,
+            maxItems: 3,
+            items: {
+              type: 'object',
+              additionalProperties: true,
+              required: ['id', 'title', 'description'],
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                description: { type: 'string' },
+                expectedDelta: {
+                  type: 'object',
+                  additionalProperties: { type: 'number' },
+                },
+                category: { type: 'string' },
+                riskLevel: { type: 'string' },
               },
             },
           },
@@ -986,11 +1011,18 @@ export class AIService {
           items: {
             type: 'object',
             additionalProperties: true,
-            required: ['id', 'name', 'cash'],
+            required: ['id', 'name', 'cash', 'attributes', 'passiveIncome', 'passiveExpense', 'backstory'],
             properties: {
               id: { type: 'string' },
               name: { type: 'string' },
               cash: { type: 'number' },
+              attributes: {
+                type: 'object',
+                additionalProperties: { type: 'number' },
+              },
+              passiveIncome: { type: 'number' },
+              passiveExpense: { type: 'number' },
+              backstory: { type: 'string' },
             },
           },
         },
@@ -1001,9 +1033,20 @@ export class AIService {
         initialOptions: {
           type: 'array',
           minItems: 3,
+          maxItems: 3,
           items: {
             type: 'object',
             additionalProperties: true,
+            required: ['id', 'title', 'description', 'expectedDelta'],
+            properties: {
+              id: { type: 'string' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              expectedDelta: {
+                type: 'object',
+                additionalProperties: { type: 'number' },
+              },
+            },
           },
         },
       },
@@ -1371,52 +1414,183 @@ export class AIService {
    * 解析文本格式的推演结果
    * 支持从 AI 响应中提取 JSON 格式的 TurnResultDTO
    */
-  private parseNarrativeResponse(content: string): InferenceResult['result'] {
-    // 尝试提取 JSON 块
-    const jsonPatterns = [
-      /```json\s*([\s\S]*?)```/i,  // Markdown JSON 代码块
-      /```\s*([\s\S]*?)```/,       // 普通代码块
-      /(\{[\s\S]*\})/,             // 直接 JSON 对象
-    ];
+  private parseJsonFromText(content: string, context: string): Record<string, unknown> | null {
+    const candidates: string[] = [];
+    const seen = new Set<string>();
 
-    for (const pattern of jsonPatterns) {
+    const pushCandidate = (candidate: string | null | undefined) => {
+      if (!candidate) return;
+      const trimmed = candidate.trim();
+      if (!trimmed || seen.has(trimmed)) return;
+      seen.add(trimmed);
+      candidates.push(trimmed);
+    };
+
+    pushCandidate(content);
+
+    const fencePatterns = [
+      /```json\s*([\s\S]*?)```/i,
+      /```\s*([\s\S]*?)```/i,
+    ];
+    for (const pattern of fencePatterns) {
       const match = content.match(pattern);
       if (match && match[1]) {
-        try {
-          const jsonStr = match[1].trim();
-          const parsed = JSON.parse(jsonStr);
-          
-          // 验证是否包含必要字段
-          if (parsed && typeof parsed === 'object') {
-            logger.info(`Successfully parsed JSON from AI response`, {
-              hasNarrative: !!parsed.narrative,
-              hasPerEntityPanel: Array.isArray(parsed.perEntityPanel),
-              hasLeaderboard: Array.isArray(parsed.leaderboard),
-              hasHexagram: !!parsed.hexagram,
-              hasOptions: Array.isArray(parsed.options),
-              parsedKeys: Object.keys(parsed),
-            });
-            
-            // 返回完整的解析结果，映射到 InferenceResult['result'] 格式
-            return {
-              narrative: parsed.narrative || content,
-              outcomes: this.mapEntityPanelsToOutcomes(parsed.perEntityPanel),
-              events: this.mapTurnEvents(parsed.events),
-              nextRoundHints: parsed.nextRoundHints,
-              // 保留完整的解析数据供前端使用
-              ...parsed,
-            };
-          }
-        } catch (parseError: any) {
-          logger.warn(`Failed to parse JSON from AI response`, {
-            error: parseError.message,
-            jsonPreview: match[1]?.substring(0, 200),
-          });
+        pushCandidate(match[1]);
+      }
+    }
+
+    pushCandidate(this.extractFirstBalancedJsonObject(content));
+
+    for (const candidate of candidates) {
+      const direct = this.tryParseJson(candidate);
+      if (direct && typeof direct === 'object' && !Array.isArray(direct)) {
+        return direct as Record<string, unknown>;
+      }
+
+      const repaired = this.repairJsonLikeString(candidate);
+      const parsedAfterRepair = this.tryParseJson(repaired);
+      if (parsedAfterRepair && typeof parsedAfterRepair === 'object' && !Array.isArray(parsedAfterRepair)) {
+        logger.info(`Parsed JSON after repair`, {
+          context,
+          originalLength: candidate.length,
+          repairedLength: repaired.length,
+        });
+        return parsedAfterRepair as Record<string, unknown>;
+      }
+    }
+
+    return null;
+  }
+
+  private tryParseJson(json: string): unknown | null {
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  private extractFirstBalancedJsonObject(text: string): string | null {
+    const start = text.indexOf('{');
+    if (start < 0) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === '{') depth++;
+      if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(start, i + 1);
         }
       }
     }
 
-    // 如果无法解析 JSON，返回原始文本
+    return null;
+  }
+
+  private repairJsonLikeString(input: string): string {
+    let repaired = input.trim();
+
+    repaired = repaired
+      .replace(/[\u201C\u201D\uFF02]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/\u00A0/g, ' ');
+
+    let normalized = '';
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < repaired.length; i++) {
+      const ch = repaired[i];
+
+      if (inString) {
+        normalized += ch;
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        normalized += ch;
+        continue;
+      }
+
+      if (ch === '\uFF1A') {
+        normalized += ':';
+      } else if (ch === '\uFF0C') {
+        normalized += ',';
+      } else {
+        normalized += ch;
+      }
+    }
+
+    repaired = normalized;
+    repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+    repaired = repaired.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+    return repaired;
+  }
+
+  private parseNarrativeResponse(content: string): InferenceResult['result'] {
+    const parsed = this.parseJsonFromText(content, 'inference_result');
+    if (parsed) {
+      logger.info(`Successfully parsed JSON from AI response`, {
+        hasNarrative: typeof parsed.narrative === 'string',
+        hasPerEntityPanel: Array.isArray(parsed.perEntityPanel),
+        hasLeaderboard: Array.isArray(parsed.leaderboard),
+        hasHexagram: Boolean(parsed.hexagram),
+        hasOptions: Array.isArray(parsed.options),
+        parsedKeys: Object.keys(parsed),
+      });
+
+      return {
+        narrative: typeof parsed.narrative === 'string' ? parsed.narrative : content,
+        outcomes: this.mapEntityPanelsToOutcomes(parsed.perEntityPanel as any[] | undefined),
+        events: this.mapTurnEvents(parsed.events as any[] | undefined),
+        nextRoundHints: typeof parsed.nextRoundHints === 'string' ? parsed.nextRoundHints : undefined,
+        ...parsed,
+      };
+    }
+
+    logger.warn(`Failed to parse JSON from AI response`, {
+      jsonPreview: content.substring(0, 300),
+    });
+
     logger.info(`No valid JSON found in AI response, returning raw narrative`);
     return {
       narrative: content,
@@ -1424,10 +1598,6 @@ export class AIService {
       events: [],
     };
   }
-
-  /**
-   * 将 perEntityPanel 映射为 outcomes 格式（向后兼容）
-   */
   private mapEntityPanelsToOutcomes(panels: any[] | undefined): Array<{
     playerIndex: number;
     outcome: string;
@@ -1675,7 +1845,19 @@ export class AIService {
         category: string;
       }> = [];
 
-      if (result.narrative) {
+      const directOptions = (result as any)?.options;
+      if (Array.isArray(directOptions)) {
+        optionsArray = directOptions
+          .map((opt: any, index: number) => ({
+            option_id: String(opt?.option_id ?? opt?.id ?? index + 1),
+            text: String(opt?.text ?? opt?.title ?? ''),
+            expected_effect: String(opt?.expected_effect ?? opt?.description ?? ''),
+            category: String(opt?.category ?? 'explore'),
+          }))
+          .filter(opt => opt.text.trim().length > 0);
+      }
+
+      if (optionsArray.length === 0 && result.narrative) {
         // Try to extract JSON from narrative text
         const jsonMatch = result.narrative.match(/\{[\s\S]*"options"[\s\S]*\}/);
         if (jsonMatch) {
@@ -1768,24 +1950,27 @@ export class AIService {
     }
 
     prompt += `## 初始化任务\n`;
-    prompt += `请根据《凡墙皆是门》游戏蓝本，完成以下初始化工作：\n\n`;
-    prompt += `1. **商业背景故事**（约600字）：\n`;
-    prompt += `   - 用自然段落写小说故事，描述 ${initConfig.entityCount} 个企业之间的博弈背景\n`;
-    prompt += `   - 故事中不要讲卦象\n`;
-    prompt += `   - 各企业之间要有联系和竞争关系\n\n`;
+    prompt += `请根据《凡墙皆是门》游戏蓝本，完成以下初始化工作，并保证结果可直接用于正式开局：\n\n`;
+    prompt += `1. **商业背景故事**（约500-700字）：\n`;
+    prompt += `   - 用自然段落写完整故事，描述 ${initConfig.entityCount} 个企业在同一行业生态中的竞争与合作\n`;
+    prompt += `   - 必须包含清晰的利益冲突、资源约束与阶段性目标\n`;
+    prompt += `   - 不要在背景故事正文中解释卦象术语\n\n`;
     prompt += `2. **主体初始状态**：\n`;
-    prompt += `   - 为每个主体生成中文名称（如：蓝鲸工业、红隼贸易）\n`;
-    prompt += `   - 设定初始属性：市场份额、品牌声誉、创新能力等\n`;
-    prompt += `   - 设定被动收入和被动支出（确保净损益为正）\n\n`;
+    prompt += `   - 为每个主体生成风格鲜明且不重复的中文名称\n`;
+    prompt += `   - 属性至少包含：市场份额、品牌声誉、创新能力（建议范围 0-100）\n`;
+    prompt += `   - 市场份额总和应接近 100（允许 95-105 的误差）\n`;
+    prompt += `   - 被动收入与被动支出需为正数，且净现金流（收入-支出）为正\n`;
+    prompt += `   - 主体现金统一使用初始资金，不额外改写\n\n`;
     prompt += `3. **年度卦象**：\n`;
-    prompt += `   - 随机生成一个周易卦象\n`;
-    prompt += `   - 提供卦名、六爻、象曰解释\n`;
-    prompt += `   - 生成年度叙事暗线（影响事件风格）\n\n`;
-    prompt += `4. **初始决策选项**：\n`;
-    prompt += `   - 为玩家提供 3 个初始决策选项\n`;
-    prompt += `   - 每个选项附带预期资源变动\n\n`;
+    prompt += `   - 生成一个周易卦象，返回卦名、吉凶倾向、六爻（仅 "yang"/"yin"）与解释文本\n`;
+    prompt += `   - 生成年度叙事暗线 yearlyTheme，用于后续回合事件风格\n\n`;
+    prompt += `4. **首回合初始决策选项（仅第1回合使用）**：\n`;
+    prompt += `   - 提供 3 个可执行的初始选项，分别体现激进/稳健/平衡三种策略方向\n`;
+    prompt += `   - 每个选项必须包含 title、description、expectedDelta\n`;
+    prompt += `   - expectedDelta 中 cash 使用金额变化，其他属性使用百分点变化\n`;
+    prompt += `   - 后续回合的选项将由推演阶段每回合动态生成 perEntityOptions\n\n`;
     prompt += `5. **资金变动公式**：\n`;
-    prompt += `   - 简要说明资金计算规则\n\n`;
+    prompt += `   - 用一句清晰公式说明每回合资金结算逻辑，包含被动收支与决策影响\n\n`;
 
     prompt += `## 输出格式（必须为 JSON）\n`;
     prompt += '```json\n';
@@ -1812,13 +1997,19 @@ export class AIService {
     prompt += '    "yearlyTheme": "年度叙事暗线"\n';
     prompt += '  },\n';
     prompt += '  "initialOptions": [\n';
-    prompt += '    { "id": "1", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -50000 } },\n';
-    prompt += '    { "id": "2", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -30000 } },\n';
-    prompt += '    { "id": "3", "title": "选项标题", "description": "选项描述", "expectedDelta": { "cash": -20000 } }\n';
+    prompt += '    { "id": "INIT_1", "title": "激进扩张", "description": "加大市场投入以争夺份额", "expectedDelta": { "cash": -50000, "市场份额": 4, "品牌声誉": -1 } },\n';
+    prompt += '    { "id": "INIT_2", "title": "稳健经营", "description": "控制成本并优化现金流", "expectedDelta": { "cash": 10000, "品牌声誉": 1 } },\n';
+    prompt += '    { "id": "INIT_3", "title": "平衡推进", "description": "适度投入研发与市场，保持弹性", "expectedDelta": { "cash": -20000, "创新能力": 2, "市场份额": 1 } }\n';
     prompt += '  ],\n';
     prompt += '  "cashFormula": "资金变动公式说明"\n';
     prompt += '}\n';
     prompt += '```\n';
+    prompt += '\n';
+    prompt += '### 硬性约束\n';
+    prompt += '1. 必须只输出一个 JSON 对象，不要输出解释、注释或 Markdown 代码块以外的文本\n';
+    prompt += '2. entities 数量必须严格等于主体数量配置，且 id 必须按 A/B/C... 顺序返回\n';
+    prompt += '3. 每个主体都必须包含 id、name、cash、attributes、passiveIncome、passiveExpense、backstory\n';
+    prompt += '4. initialOptions 必须恰好 3 条，且 expectedDelta 不能为空对象\n';
 
     try {
       logger.info(`Initializing game with ${initConfig.entityCount} entities`, {

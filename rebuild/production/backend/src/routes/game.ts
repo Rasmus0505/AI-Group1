@@ -559,7 +559,11 @@ router.get(
       });
 
       if (!session || session.status !== 'playing') {
-        throw new AppError('当前房间没有正在进行的对局', 404);
+        res.json({
+          code: 200,
+          data: null,
+        });
+        return;
       }
 
       res.json({
@@ -2382,6 +2386,15 @@ function buildTurnResultDTO(
     description: string;
     expectedDelta?: Record<string, number>;
   }>;
+  perEntityOptions?: Record<
+    string,
+    Array<{
+      id: string;
+      title: string;
+      description: string;
+      expectedDelta?: Record<string, number>;
+    }>
+  >;
   ledger?: {
     startingCash: number;
     passiveIncome: number;
@@ -2398,13 +2411,14 @@ function buildTurnResultDTO(
     severity: 'warning' | 'critical';
   }>;
 } {
-  const narrative = result?.narrative || '';
+  const normalizedResult = normalizeInferencePayload(result);
+  const narrative = toNarrativeString(normalizedResult.narrative) || '';
 
   const baselineEntities = extractEntityStateFromGameState(baselineGameState, inferenceData);
 
-  const perEntityPanelSource = Array.isArray(result?.perEntityPanel)
-    ? result.perEntityPanel
-    : normalizeOutcomesToEntityPanels(result?.outcomes, inferenceData);
+  const perEntityPanelSource = Array.isArray(normalizedResult.perEntityPanel)
+    ? normalizedResult.perEntityPanel
+    : normalizeOutcomesToEntityPanels(normalizedResult.outcomes, inferenceData);
 
   const aiPanelById = new Map<string, any>();
   if (Array.isArray(perEntityPanelSource)) {
@@ -2476,7 +2490,7 @@ function buildTurnResultDTO(
   });
 
   // 事件映射：尽量从旧结构提取 keyword/resource/newValue
-  const eventsRaw = Array.isArray(result?.events) ? result.events : [];
+  const eventsRaw = Array.isArray(normalizedResult.events) ? normalizedResult.events : [];
   const events = eventsRaw
     .map((ev: any, idx: number) => {
       const keyword =
@@ -2521,24 +2535,324 @@ function buildTurnResultDTO(
       rank: idx + 1,
     }));
 
+  const redactedSegments = Array.isArray(normalizedResult.redactedSegments)
+    ? (normalizedResult.redactedSegments as Array<{ start: number; end: number; reason?: string }>)
+    : Array.isArray(normalizedResult.redacted_segments)
+    ? (normalizedResult.redacted_segments as Array<{ start: number; end: number; reason?: string }>)
+    : [];
+
+  const achievements = Array.isArray(normalizedResult.achievements)
+    ? (normalizedResult.achievements as Array<{
+        id: string;
+        entityId: string;
+        title: string;
+        description: string;
+      }>)
+    : [];
+
+  const hexagram =
+    normalizedResult.hexagram && typeof normalizedResult.hexagram === 'object'
+      ? (normalizedResult.hexagram as {
+          name: string;
+          omen: string;
+          lines: Array<'yang' | 'yin'>;
+          text: string;
+          colorHint?: string;
+        })
+      : undefined;
+
+  const options = Array.isArray(normalizedResult.options)
+    ? (normalizedResult.options as Array<{
+        id: string;
+        title: string;
+        description: string;
+        expectedDelta?: Record<string, number>;
+      }>)
+    : undefined;
+
+  const perEntityOptions = normalizePerEntityOptions(
+    normalizedResult.perEntityOptions,
+    perEntityPanel,
+    options
+  );
+
+  const ledger =
+    normalizedResult.ledger && typeof normalizedResult.ledger === 'object'
+      ? (normalizedResult.ledger as {
+          startingCash: number;
+          passiveIncome: number;
+          passiveExpense: number;
+          decisionCost: number;
+          balance: number;
+        })
+      : undefined;
+
+  const branchingNarratives = Array.isArray(normalizedResult.branchingNarratives)
+    ? normalizedResult.branchingNarratives.map(item => String(item))
+    : undefined;
+
+  const cashFlowWarning = Array.isArray(normalizedResult.cashFlowWarning)
+    ? (normalizedResult.cashFlowWarning as Array<{
+        entityId: string;
+        message: string;
+        severity: 'warning' | 'critical';
+      }>)
+    : undefined;
+
   return {
     narrative,
     events,
-    redactedSegments:
-      result?.redactedSegments || result?.redacted_segments || [],
+    redactedSegments,
     perEntityPanel,
     leaderboard,
-    riskCard: result?.riskCard || '',
-    opportunityCard: result?.opportunityCard || '',
-    benefitCard: result?.benefitCard || '',
-    achievements: result?.achievements || [],
-    hexagram: result?.hexagram,
-    options: result?.options,
-    ledger: result?.ledger,
-    branchingNarratives: result?.branchingNarratives,
-    nextRoundHints: result?.nextRoundHints || result?.hints || '',
-    roundTitle: result?.roundTitle,
-    cashFlowWarning: result?.cashFlowWarning,
+    riskCard: toNarrativeString(normalizedResult.riskCard) || '',
+    opportunityCard: toNarrativeString(normalizedResult.opportunityCard) || '',
+    benefitCard: toNarrativeString(normalizedResult.benefitCard) || '',
+    achievements,
+    hexagram,
+    options,
+    perEntityOptions,
+    ledger,
+    branchingNarratives,
+    nextRoundHints:
+      toNarrativeString(normalizedResult.nextRoundHints) ||
+      toNarrativeString(normalizedResult.hints) ||
+      '',
+    roundTitle: toNarrativeString(normalizedResult.roundTitle) || undefined,
+    cashFlowWarning,
+  };
+}
+
+function normalizeInferencePayload(value: unknown): Record<string, unknown> {
+  const queue: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+  const root = asRecord(value);
+  if (!root) return {};
+
+  queue.push(root);
+  seen.add(root);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (looksLikeTurnPayload(current)) {
+      return current;
+    }
+
+    for (const key of ['uiTurnResult', 'result', 'data', 'payload', 'output', 'response']) {
+      const nested = asRecord(current[key]);
+      if (nested && !seen.has(nested)) {
+        seen.add(nested);
+        queue.push(nested);
+      }
+    }
+  }
+
+  return root;
+}
+
+function looksLikeTurnPayload(record: Record<string, unknown>): boolean {
+  return (
+    typeof record.narrative === 'string' ||
+    Array.isArray(record.events) ||
+    Array.isArray(record.perEntityPanel) ||
+    Array.isArray(record.outcomes) ||
+    typeof record.nextRoundHints === 'string'
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toNarrativeString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+function normalizePerEntityOptions(
+  rawPerEntityOptions: unknown,
+  perEntityPanel: Array<{
+    id: string;
+    name: string;
+    cash: number;
+    attributes: Record<string, number>;
+    passiveIncome: number;
+    passiveExpense: number;
+    delta: Record<string, number>;
+  }>,
+  globalOptions?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    expectedDelta?: Record<string, number>;
+  }>
+): Record<
+  string,
+  Array<{
+    id: string;
+    title: string;
+    description: string;
+    expectedDelta?: Record<string, number>;
+  }>
+> | undefined {
+  if (!Array.isArray(perEntityPanel) || perEntityPanel.length === 0) return undefined;
+
+  const rawMap = asRecord(rawPerEntityOptions);
+  const normalized: Record<
+    string,
+    Array<{
+      id: string;
+      title: string;
+      description: string;
+      expectedDelta?: Record<string, number>;
+    }>
+  > = {};
+
+  for (const panel of perEntityPanel) {
+    const rawCandidate =
+      (rawMap && (rawMap[panel.id] ?? rawMap[panel.id.toUpperCase()] ?? rawMap[panel.id.toLowerCase()])) ||
+      undefined;
+
+    const normalizedFromEntity = normalizeOptionList(rawCandidate, panel.id);
+    const normalizedFromGlobal = normalizeOptionList(globalOptions, panel.id);
+    const merged = normalizedFromEntity.length > 0 ? normalizedFromEntity : normalizedFromGlobal;
+    normalized[panel.id] = fillEntityOptions(panel, merged);
+  }
+
+  return normalized;
+}
+
+function normalizeOptionList(
+  rawOptions: unknown,
+  entityId: string
+): Array<{
+  id: string;
+  title: string;
+  description: string;
+  expectedDelta?: Record<string, number>;
+}> {
+  if (!Array.isArray(rawOptions)) return [];
+
+  return rawOptions
+    .map((rawOption, index) => {
+      const option = asRecord(rawOption);
+      if (!option) return null;
+
+      const title = toNarrativeString(option.title || option.text).trim();
+      const description = toNarrativeString(option.description || option.expected_effect).trim();
+      if (!title || !description) return null;
+
+      const expectedDeltaRaw = asRecord(option.expectedDelta || option.expected_delta);
+      const expectedDelta: Record<string, number> = {};
+      if (expectedDeltaRaw) {
+        for (const [key, value] of Object.entries(expectedDeltaRaw)) {
+          const numeric = Number(value);
+          if (Number.isFinite(numeric)) {
+            expectedDelta[key] = roundNumber(numeric);
+          }
+        }
+      }
+
+      return {
+        id: toNarrativeString(option.id || option.option_id).trim() || `${entityId}${index + 1}`,
+        title,
+        description,
+        expectedDelta: Object.keys(expectedDelta).length > 0 ? expectedDelta : undefined,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+function fillEntityOptions(
+  panel: {
+    id: string;
+    attributes: Record<string, number>;
+    passiveIncome: number;
+    passiveExpense: number;
+  },
+  options: Array<{
+    id: string;
+    title: string;
+    description: string;
+    expectedDelta?: Record<string, number>;
+  }>
+): Array<{
+  id: string;
+  title: string;
+  description: string;
+  expectedDelta?: Record<string, number>;
+}> {
+  const normalized = options.slice(0, 3).map((option, index) => ({
+    ...option,
+    id: `${panel.id}${index + 1}`,
+  }));
+
+  while (normalized.length < 3) {
+    normalized.push(createFallbackOption(panel, normalized.length + 1));
+  }
+
+  return normalized;
+}
+
+function createFallbackOption(
+  panel: {
+    id: string;
+    attributes: Record<string, number>;
+    passiveIncome: number;
+    passiveExpense: number;
+  },
+  slot: number
+): {
+  id: string;
+  title: string;
+  description: string;
+  expectedDelta?: Record<string, number>;
+} {
+  const stableCashBoost = Math.max(10000, roundNumber(panel.passiveExpense * 0.3));
+  const growthCashCost = -Math.max(15000, roundNumber(panel.passiveIncome * 0.4));
+  const innovationCost = -Math.max(12000, roundNumber(panel.passiveIncome * 0.3));
+
+  const marketKey = Object.keys(panel.attributes).find(
+    key => key.includes('市场') || key.toLowerCase().includes('market')
+  );
+  const innovationKey = Object.keys(panel.attributes).find(
+    key => key.includes('创新') || key.toLowerCase().includes('innovation')
+  );
+
+  if (slot === 1) {
+    return {
+      id: `${panel.id}1`,
+      title: '稳住现金流',
+      description: '优先削减低效支出，保留关键业务现金弹性。',
+      expectedDelta: { cash: stableCashBoost },
+    };
+  }
+
+  if (slot === 2) {
+    return {
+      id: `${panel.id}2`,
+      title: '抢占增长窗口',
+      description: '将资源集中在高回报渠道，换取短期份额增长。',
+      expectedDelta: marketKey ? { cash: growthCashCost, [marketKey]: 2 } : { cash: growthCashCost },
+    };
+  }
+
+  return {
+    id: `${panel.id}3`,
+    title: '优化产品与创新',
+    description: '通过流程改造和研发投入提升后续竞争力。',
+    expectedDelta: innovationKey
+      ? { cash: innovationCost, [innovationKey]: 2 }
+      : { cash: innovationCost },
   };
 }
 
@@ -2759,6 +3073,7 @@ function buildNextGameState(
     players,
     entities,
     currentHexagram: uiTurnResult.hexagram || baseState.currentHexagram,
+    narrative: uiTurnResult.narrative,
     uiTurnResult,
     lastInferenceRound: round,
   };
