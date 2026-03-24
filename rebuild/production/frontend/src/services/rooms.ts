@@ -8,6 +8,7 @@ export interface RoomSummary {
   currentPlayers: number;
   hostId: string;
   hostName?: string;
+  hostInRoom?: boolean;
   createdAt: string;
   isJoined?: boolean; // 问题2修复：用户是否在房间中
 }

@@ -93,7 +93,12 @@ function Rooms() {
     // 问题4修复：监听房间人数变化事件，实时更新
     const handlePlayerJoined = (payload: unknown) => {
       if (payload && typeof payload === 'object' && 'roomId' in payload) {
-        const roomId = (payload as { roomId: string }).roomId;
+        const event = payload as { roomId: string; isHost?: boolean };
+        if (event.isHost) {
+          refresh();
+          return;
+        }
+        const roomId = event.roomId;
         // 更新对应房间的人数
         setRooms(prevRooms =>
           prevRooms.map(room =>
@@ -108,7 +113,12 @@ function Rooms() {
 
     const handlePlayerLeft = (payload: unknown) => {
       if (payload && typeof payload === 'object' && 'roomId' in payload) {
-        const roomId = (payload as { roomId: string }).roomId;
+        const event = payload as { roomId: string; isHost?: boolean };
+        if (event.isHost) {
+          refresh();
+          return;
+        }
+        const roomId = event.roomId;
         // 更新对应房间的人数
         setRooms(prevRooms =>
           prevRooms.map(room =>
@@ -349,7 +359,10 @@ function Rooms() {
               {rooms.map(room => (
                 <RoomCard
                   key={room.id}
-                  room={room}
+                  room={{
+                    ...room,
+                    hostName: `${room.hostName || room.hostId || 'host'} (${room.hostInRoom ? 'in-room' : 'not-in-room'})`,
+                  }}
                   onJoin={handleJoin}
                   onLeave={handleLeave}
                   onClose={handleClose}

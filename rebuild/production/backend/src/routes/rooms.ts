@@ -15,6 +15,26 @@ const parsePositiveInt = (value: any, fallback: number) => {
   return Math.floor(n);
 };
 
+const countJoinedHumanPlayersExcludingHost = async (roomId: string): Promise<number> => {
+  return prisma.roomPlayer.count({
+    where: {
+      roomId,
+      status: { not: 'left' },
+      role: { not: 'host' },
+      isHuman: true,
+    },
+  });
+};
+
+const syncRoomCurrentPlayers = async (roomId: string): Promise<number> => {
+  const currentPlayers = await countJoinedHumanPlayersExcludingHost(roomId);
+  await prisma.room.update({
+    where: { id: roomId },
+    data: { currentPlayers },
+  });
+  return currentPlayers;
+};
+
 export const ensureRoomHost = async (roomId: string, userId: string) => {
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) {
@@ -30,6 +50,7 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
   const existing = await prisma.hostConfig.findUnique({ where: { roomId } });
   if (existing) return existing;
   const room = await prisma.room.findUnique({ where: { id: roomId } });
+  const currentHumanPlayers = await countJoinedHumanPlayersExcludingHost(roomId);
   if (!room) throw new AppError('房间不存在', 404);
 
   // Default DeepSeek configuration tuned for "Every Wall is a Door" (凡墙皆是门)
@@ -75,7 +96,7 @@ const getOrCreateHostConfig = async (roomId: string, userId: string) => {
       apiBodyTemplate: defaultBodyTemplate,
       useJsonSchema: false,
       totalDecisionEntities: room.maxPlayers,
-      humanPlayerCount: Math.max(room.currentPlayers, 1),
+      humanPlayerCount: Math.max(currentHumanPlayers, 1),
       aiPlayerCount: 0,
       decisionTimeLimit: 4,
       timeoutStrategy: 'auto_submit',
@@ -135,7 +156,7 @@ router.post('/create', authenticateToken, async (req: AuthRequest, res, next) =>
       data: {
         name: roomName,
         maxPlayers: maxP,
-        currentPlayers: 1,
+        currentPlayers: 0,
         status: 'waiting',
         creatorId: userId,
         hostId: userId,
@@ -230,15 +251,51 @@ router.get('/list', authenticateToken, async (req: AuthRequest, res, next) => {
       })
       : [];
 
+    const roomPlayerCounts = roomIds.length > 0
+      ? await prisma.roomPlayer.groupBy({
+        by: ['roomId'],
+        where: {
+          roomId: { in: roomIds },
+          status: { not: 'left' },
+          role: { not: 'host' },
+          isHuman: true,
+        },
+        _count: {
+          _all: true,
+        },
+      })
+      : [];
+
+    const hostMemberships = roomIds.length > 0
+      ? await prisma.roomPlayer.findMany({
+        where: {
+          roomId: { in: roomIds },
+          status: { not: 'left' },
+          role: 'host',
+        },
+        select: {
+          roomId: true,
+        },
+      })
+      : [];
+
     const membershipMap = new Map(
       userMemberships.map(m => [m.roomId, m.status])
     );
+    const roomPlayerCountMap = new Map(
+      roomPlayerCounts.map(item => [item.roomId, item._count._all])
+    );
+    const hostInRoomSet = new Set(hostMemberships.map(item => item.roomId));
 
     const withHostName = rooms.map(room => {
       const { host, ...rest } = room;
+      const hostInRoom = hostInRoomSet.has(room.id);
+      const hostBaseName = host?.nickname || host?.username || room.hostId || 'host';
       return {
         ...rest,
-        hostName: host?.nickname || host?.username || '',
+        currentPlayers: roomPlayerCountMap.get(room.id) ?? 0,
+        hostInRoom,
+        hostName: hostBaseName,
         isJoined: userId ? membershipMap.has(room.id) : false, // 问题2修复：返回用户是否在房间中
       };
     });
@@ -298,41 +355,38 @@ router.post('/:roomId/join', authenticateToken, async (req: AuthRequest, res, ne
     }
 
     // 检查房间是否已满（但如果是重新加入的玩家，不计入满员限制）
-    if (!existing && room.currentPlayers >= room.maxPlayers) {
+    const isHostUser = room.hostId === userId;
+    const joinedPlayerCount = await countJoinedHumanPlayersExcludingHost(roomId);
+
+    if (!existing && !isHostUser && joinedPlayerCount >= room.maxPlayers) {
       throw new AppError('房间已满员', 403);
     }
 
     // User rejoining the room (was previously left) or new user
     if (existing) {
-      // Rejoin: update status and increment currentPlayers
-      // (currentPlayers was decremented when user left)
+      // Rejoin: update status
       await prisma.roomPlayer.update({
         where: { id: existing.id },
         data: { status: 'joined', role: existing.role ?? 'human_player' },
       });
-      await prisma.room.update({
-        where: { id: roomId },
-        data: { currentPlayers: { increment: 1 } },
-      });
     } else {
-      // New user: create record and increment currentPlayers
+      // New user: create membership. Host is not counted in currentPlayers.
+      const role = isHostUser ? 'host' : 'human_player';
       await prisma.roomPlayer.create({
         data: {
           roomId,
           userId,
-          role: 'human_player',
+          role,
           status: 'joined',
           isHuman: true,
         },
       });
-      await prisma.room.update({
-        where: { id: roomId },
-        data: { currentPlayers: { increment: 1 } },
-      });
     }
 
+    await syncRoomCurrentPlayers(roomId);
+
     try {
-      io.to(roomId).emit('player_joined', { roomId, userId });
+      io.to(roomId).emit('player_joined', { roomId, userId, isHost: isHostUser });
     } catch (emitErr) {
       logger.warn('emit player_joined failed', emitErr);
     }
@@ -366,15 +420,10 @@ router.post('/:roomId/leave', authenticateToken, async (req: AuthRequest, res, n
       data: { status: 'left' },
     });
 
-    await prisma.room.update({
-      where: { id: roomId },
-      data: {
-        currentPlayers: { decrement: 1 },
-      },
-    });
+    await syncRoomCurrentPlayers(roomId);
 
     try {
-      io.to(roomId).emit('player_left', { roomId, userId });
+      io.to(roomId).emit('player_left', { roomId, userId, isHost: membership.role === 'host' });
     } catch (emitErr) {
       logger.warn('emit player_left failed', emitErr);
     }
@@ -705,7 +754,7 @@ router.post('/:roomId/host-config', authenticateToken, async (req: AuthRequest, 
 
     await ensureRoomHost(roomId, userId);
 
-    const total = Number(totalDecisionEntities ?? humanPlayerCount + aiPlayerCount);
+    const total = Number(totalDecisionEntities ?? (Number(humanPlayerCount ?? 0) + Number(aiPlayerCount ?? 0)));
     const human = Number(humanPlayerCount ?? 0);
     const ai = Number(aiPlayerCount ?? 0);
     const timeLimit = Number(decisionTimeLimit ?? 4);
@@ -858,7 +907,7 @@ router.post(
       } = req.body || {};
 
       await ensureRoomHost(roomId, userId);
-      const total = Number(totalDecisionEntities ?? humanPlayerCount + aiPlayerCount);
+      const total = Number(totalDecisionEntities ?? (Number(humanPlayerCount ?? 0) + Number(aiPlayerCount ?? 0)));
       const human = Number(humanPlayerCount ?? 0);
       const ai = Number(aiPlayerCount ?? 0);
       const timeLimit = Number(decisionTimeLimit ?? 4);
@@ -884,7 +933,7 @@ router.post(
       // 同步更新房间的 maxPlayers
       await prisma.room.update({
         where: { id: roomId },
-        data: { maxPlayers: total },
+        data: { maxPlayers: human },
       });
 
       res.json({ code: 200, message: '玩家配置已更新', data: toHostConfigResponse(updated) });

@@ -548,10 +548,20 @@ router.get(
           data: { status: 'joined' },
         });
         // 同步更新房间人数（因为之前离开时已经减过了）
-        await prisma.room.update({
-          where: { id: roomId },
-          data: { currentPlayers: { increment: 1 } },
-        });
+        if (membership.role !== 'host') {
+          const joinedPlayerCount = await prisma.roomPlayer.count({
+            where: {
+              roomId,
+              status: { not: 'left' },
+              role: { not: 'host' },
+              isHuman: true,
+            },
+          });
+          await prisma.room.update({
+            where: { id: roomId },
+            data: { currentPlayers: joinedPlayerCount },
+          });
+        }
       }
 
       const session = await prisma.gameSession.findUnique({
@@ -3368,21 +3378,6 @@ router.get(
               hostConfig: true,
             },
           },
-          actions: {
-            where: {
-              status: { in: ['submitted', 'reviewed'] },
-            },
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  username: true,
-                  nickname: true,
-                },
-              },
-            },
-            orderBy: { submittedAt: 'asc' },
-          },
           events: {
             where: {
               completedAt: null,
@@ -3394,6 +3389,28 @@ router.get(
       if (!session) throw new AppError('游戏会话不存在', 404);
 
       await ensureRoomMembership(session.roomId, userId);
+
+      const [submittedDecisionUsers, totalPlayers] = await Promise.all([
+        prisma.playerAction.findMany({
+          where: {
+            sessionId: session.id,
+            round: session.currentRound,
+            status: { in: ['submitted', 'reviewed'] },
+          },
+          distinct: ['userId'],
+          select: {
+            userId: true,
+          },
+        }),
+        prisma.roomPlayer.count({
+          where: {
+            roomId: session.roomId,
+            status: { not: 'left' },
+            role: { not: 'host' },
+            isHuman: true,
+          },
+        }),
+      ]);
 
       // 获取推演结果（如果有）
       let inferenceResult = null;
@@ -3436,8 +3453,8 @@ router.get(
             progress: event.progress,
             round: event.round,
           })),
-          submittedDecisions: session.actions.length,
-          totalPlayers: session.room.hostConfig?.totalDecisionEntities || 0,
+          submittedDecisions: submittedDecisionUsers.length,
+          totalPlayers,
           updatedAt: session.updatedAt,
         },
       });

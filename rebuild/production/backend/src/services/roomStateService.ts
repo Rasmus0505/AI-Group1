@@ -79,9 +79,12 @@ export const getRoomState = async (roomId: string): Promise<RoomState> => {
     // 静默处理数据库查询错误
   }
 
+  // Room state player list is for human players only (exclude host).
+  const visiblePlayers = hostId ? players.filter(playerId => playerId !== hostId) : players;
+
   return {
     roomId,
-    players,
+    players: visiblePlayers,
     status: (status as RoomStatus | null) ?? 'waiting',
     version,
     hostId,
